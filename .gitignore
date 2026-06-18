@@ -1,0 +1,10 @@
+# Lock files
+.~*
+
+# macOS
+.DS_Store
+
+# R
+.Rhistory
+.RData
+.Ruserdata
