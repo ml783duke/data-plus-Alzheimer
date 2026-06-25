@@ -1,0 +1,137 @@
+---
+title: "Merging ADNI Data"
+author: "Siena Avolio"
+format: html
+editor: visual
+---
+
+## Merging ADNI Data
+
+```{r}
+#| label: load-packages
+
+
+
+library(tidyverse)
+library(readr)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+
+```
+
+```{r}
+#| label: read-data
+somascanraw <- read_excel("CruchagaLab_CSF_SOMAscan7k_Protein_matrix_postQC_20230620.xlsx")
+f01_duke_uplcraw <- read_excel("f01_duke_uplc.xlsx")
+f02a_leiden_hphraw <- read_excel("f02a_leiden_hph.xlsx")
+f02b_leiden_lphraw <- read_excel("f02b_leiden_lph.xlsx")
+f03_duke_metabolonraw <- read_excel("f03_duke_metabolon.xlsx")
+f04_npiraw <- read_excel("f04_npi.xlsx")
+f05_npiqraw <- read_excel("f05_npiq.xlsx")
+f06_medhistraw <- read_excel("f06_medhist.xlsx")
+f07_bhr_baselineraw <- read_excel("f07_bhr_baseline.xlsx")
+f08_bhr_longitudinalraw <- read_excel("f08_bhr_longitudinal.xlsx")
+f09_bhr_caregiverraw <- read_excel("f09_bhr_caregiver.xlsx")
+f10_ptdemograw <- read_excel("f10_ptdemog.xlsx")
+lifestyle_dictionaryraw <- read_excel("lifestyle_dictionary.xlsx")
+
+
+```
+
+```{r}
+#| label: select-respective-variables
+
+f01_duke_uplc <- f01_duke_uplcraw |>
+  select(RID, DHA, EPA, HCys) 
+
+f02a_leiden_hph <- f02a_leiden_hphraw |>
+  select(RID, BSH_FA20.5_w3, BSH_FA22.6_w3) 
+
+f02b_leiden_lph <- f02b_leiden_lphraw |>
+  select(RID,  BSL_FA20.5_w3, BSL_FA22.6_w3) 
+
+f03_duke_metabolon <- f03_duke_metabolonraw |>
+  select(RID, X424, X439, X100008930, X2050, X100000665, X100001181, X848, X100002717, X100002719, X100004494, EXAMDATE) 
+
+f04_npi <- f04_npiraw |>
+  select(RID, NPIK, NPIKTOT, NPIK1, NPIK2, NPIK3, NPIK4, NPIK5, NPIK6, NPIK7, NPIK8, NPIK9A, NPIK9B, NPIK9C) 
+
+f05_npiq <- f05_npiqraw |>
+  select(RID, NPIK, NPIKSEV)
+
+f06_medhist <- f06_medhistraw |>
+  select(RID, MH14ALCH, MH14AALCH, MH16SMOK,
+         MH16ASMOK, MH16BSMOK, MH16CSMOK)
+
+f07_bhr_baseline <- f07_bhr_baselineraw |>
+  select(RID, QID46_9)
+
+#f08_bhr_longitudinal <- f08_bhr_longitudinalraw |>
+  #select(RID, QID50_9, CollectedDate_DRVD)
+
+f09_bhr_caregiver <- f09_bhr_caregiverraw |>
+  select(StudyPartnerID, QID44_1_3, QID44_2_3, CollectedDate_DRVD) |>
+  mutate(CollectedDate_DRVD = as.Date(CollectedDate_DRVD)) |>
+  arrange(StudyPartnerID, CollectedDate_DRVD) |>
+  group_by(StudyPartnerID) |>
+  slice_head(n = 1) |>
+  ungroup()
+  
+  
+#patient 3265 has 3 visits;
+
+ #Study Partner ID is the same as RID, larger numbers because later test
+
+f10_ptdemog <- f10_ptdemograw |>
+  select(RID, PTWORK, PTWORKHS)
+
+#socialtest <- f07_bhr_baseline |>
+  #full_join(f08_bhr_longitudinal,
+           # by = "RID") 
+  
+#socialtestIDcount <- socialtest |>
+  #mutate("n" = count(RID)) |>
+  #filter(n > 1)
+
+#take first and last observation for longitudinal data 
+
+```
+
+```{r}
+#| label: merge-lifestyle
+
+datasets <- list(
+  f01_duke_uplc,
+  f02a_leiden_hph,
+  f02b_leiden_lph,
+  f03_duke_metabolon,
+  f04_npi,
+  #f05_npiq,
+  f06_medhist,
+  f07_bhr_baseline,
+  #f08_bhr_longitudinal,
+  f10_ptdemog
+)
+
+# Convert all RID variables to the same type
+datasets <- lapply(datasets, function(x) {
+  x |>
+    mutate(RID = as.double(RID))
+})
+
+# Merge all datasets by RID
+
+lifestyle <- reduce(datasets, full_join, by = "RID")
+
+#Add in 09 dataset
+
+lifestyle <- lifestyle |>
+  full_join(f09_bhr_caregiver, 
+    by = c("RID" = "StudyPartnerID"))
+
+
+
+
+
+```
