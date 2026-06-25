@@ -130,6 +130,7 @@ lifestyle <- lifestyle |>
   full_join(f09_bhr_caregiver, 
     by = c("RID" = "StudyPartnerID"))
 
+write.csv(lifestyle, "lifestyle.csv", row.names = FALSE)
 
 
 
