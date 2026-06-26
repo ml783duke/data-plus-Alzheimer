@@ -9,3 +9,8 @@
 .RData
 .Ruserdata
 .Rproj.user
+
+# Large raw data files (exceed GitHub limits)
+protein_raw_data/BSHRI_PLA_CSF_NULISA_CNS_22Jun2026.xlsx
+protein_raw_data/somascan with gene ID.txt
+protein_raw_data/CruchagaLab_CSF_SOMAscan7k_Protein_matrix_postQC_20230620.xlsx
