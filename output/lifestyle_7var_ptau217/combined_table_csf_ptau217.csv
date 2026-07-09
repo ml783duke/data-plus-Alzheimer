@@ -1,0 +1,8 @@
+"Variable","Category","Uni_Effect","Uni_P","Uni_FDR","Uni_N","Multi_Effect","Multi_P","Uni_Sig"
+"DHA (n-3 PUFA)","Nutrition","-0.0052","2.07e-01","3.63e-01",1011,"-0.0041","6.76e-01",""
+"EPA (n-3 PUFA)","Nutrition","-0.0062","1.35e-01","3.63e-01",979,"0.0005","9.62e-01",""
+"Homocysteine","Nutrition","0.0058","1.58e-01","3.63e-01",1012,"0.0085","8.08e-02",""
+"NPI Sleep Domain","Neuropsychiatric","0.0086","3.85e-01","5.39e-01",1217,"-0.0153","4.54e-01",""
+"NPI Total Score","Neuropsychiatric","0.0051","1.78e-01","3.63e-01",1217,"0.0079","3.20e-01",""
+"Alcohol Abuse History","Substance Use","0.0005","9.78e-01","9.78e-01",1122,"-0.0054","8.25e-01",""
+"Smoking Status","Substance Use","-0.0010","8.97e-01","9.78e-01",1122,"0.0092","3.57e-01",""

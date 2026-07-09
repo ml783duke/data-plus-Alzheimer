@@ -276,11 +276,9 @@ p_forest <- ggplot(plot_data, aes(x = beta, y = var_label, color = sig_level)) +
     axis.text.y  = element_text(size = 8)
   )
 
-ggsave(file.path(out_dir, "lifestyle_ptau_forest.pdf"), p_forest,
-       width = 9, height = 7, device = "pdf")
 ggsave(file.path(out_dir, "lifestyle_ptau_forest.png"), p_forest,
        width = 9, height = 7, dpi = 300, device = "png")
-cat("Saved: lifestyle_ptau_forest.pdf/png\n")
+cat("Saved: lifestyle_ptau_forest.png\n")
 
 # ===========================================================================
 # 10. Summary

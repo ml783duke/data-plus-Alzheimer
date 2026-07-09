@@ -318,8 +318,6 @@ volcano_p <- ggplot(plot_data, aes(x = spearman_rho, y = neg_log10_fdr_capped,
     plot.subtitle = element_text(size = 8, color = "grey40")
   )
 
-ggsave(file.path(out_dir, "volcano_ptau_proteins.pdf"), volcano_p,
-       width = 9, height = 7, device = "pdf")
 ggsave(file.path(out_dir, "volcano_ptau_proteins.png"), volcano_p,
        width = 9, height = 7, dpi = 300)
 
@@ -347,8 +345,6 @@ bar_pos <- ggplot(pos30, aes(x = neg_log10_fdr, y = gene_label, fill = neg_log10
     axis.text.y = element_text(face = "italic", size = 9)
   )
 
-ggsave(file.path(out_dir, "top30_positive_barplot.pdf"), bar_pos,
-       width = 10, height = 9, device = "pdf")
 ggsave(file.path(out_dir, "top30_positive_barplot.png"), bar_pos,
        width = 10, height = 9, dpi = 300)
 
@@ -376,8 +372,6 @@ bar_neg <- ggplot(neg30, aes(x = neg_log10_fdr, y = gene_label, fill = neg_log10
     axis.text.y = element_text(face = "italic", size = 9)
   )
 
-ggsave(file.path(out_dir, "top30_negative_barplot.pdf"), bar_neg,
-       width = 10, height = 9, device = "pdf")
 ggsave(file.path(out_dir, "top30_negative_barplot.png"), bar_neg,
        width = 10, height = 9, dpi = 300)
 
@@ -389,8 +383,6 @@ combined <- (volcano_p | (bar_pos / bar_neg)) +
     caption = sprintf("Generated: %s | %d baseline samples | %d proteins tested",
                       Sys.Date(), nrow(df_analysis), nrow(results))
   )
-ggsave(file.path(out_dir, "combined_ptau_protein_analysis.pdf"), combined,
-       width = 18, height = 14, device = "pdf")
 ggsave(file.path(out_dir, "combined_ptau_protein_analysis.png"), combined,
        width = 18, height = 14, dpi = 300)
 

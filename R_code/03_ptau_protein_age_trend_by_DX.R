@@ -118,7 +118,7 @@ run_dx_analysis <- function(df_group, dx_label) {
   cat(sprintf("  Valid (AGE, PTAU) pairs: %d\n", sum(ptau_valid)))
 
   ptau_loess <- tryCatch(
-    loess(ptau_log2[ptau_valid] ~ age_vals[ptau_valid], span = LOESS_SPAN),
+    loess(ptau_log2[ptau_valid] ~ age_vals[ptau_valid], degree = 1, span = LOESS_SPAN),
     error = function(e) NULL
   )
   if (is.null(ptau_loess)) {
@@ -156,7 +156,7 @@ run_dx_analysis <- function(df_group, dx_label) {
       eff_span <- max(LOESS_SPAN, 15 / n_valid)
 
       loess_fit <- tryCatch(
-        loess(prot_log2[valid_idx] ~ age_vals[valid_idx], span = eff_span),
+        loess(prot_log2[valid_idx] ~ age_vals[valid_idx], degree = 1, span = eff_span),
         error = function(e) NULL
       )
 
@@ -356,15 +356,24 @@ for (g in DX_GROUPS) {
   ptau_log2 <- res$ptau_log2
   ptau_fitted <- res$ptau_fitted
 
-  # PTAU z-scores
-  ptau_raw_z    <- (ptau_log2 - mean(ptau_log2, na.rm = TRUE)) / sd(ptau_log2, na.rm = TRUE)
-  ptau_fitted_z <- (ptau_fitted - mean(ptau_fitted, na.rm = TRUE)) / sd(ptau_fitted, na.rm = TRUE)
+  # Use raw log2 values (no z-score normalization)
+  ptau_raw_log2 <- ptau_log2
+  ptau_fitted_log2 <- ptau_fitted
 
-  # Build line data
+  # Build line and scatter data
   line_list <- list()
-  line_list[[1]] <- data.frame(
+  scatter_list <- list()
+
+  # PTAU: line + scatter
+  line_list[["PTAU"]] <- data.frame(
     AGE      = age_vals,
-    fitted_z = ptau_fitted_z,
+    log2_val = ptau_fitted_log2,
+    series   = "PTAU",
+    stringsAsFactors = FALSE
+  )
+  scatter_list[["PTAU"]] <- data.frame(
+    AGE      = age_vals,
+    log2_val = ptau_raw_log2,
     series   = "PTAU",
     stringsAsFactors = FALSE
   )
@@ -379,51 +388,66 @@ for (g in DX_GROUPS) {
 
     eff_span <- max(LOESS_SPAN, 15 / sum(valid_idx))
     prot_fit <- tryCatch(
-      loess(prot_log2v[valid_idx] ~ age_vals[valid_idx], span = eff_span),
+      loess(prot_log2v[valid_idx] ~ age_vals[valid_idx], degree = 1, span = eff_span),
       error = function(e) NULL
     )
     if (is.null(prot_fit)) next
 
     prot_fitted <- rep(NA_real_, length(prot_log2v))
     prot_fitted[valid_idx] <- fitted(prot_fit)
-    prot_fitted_z <- (prot_fitted - mean(prot_fitted, na.rm = TRUE)) /
-                     sd(prot_fitted, na.rm = TRUE)
 
     gene_lbl <- top10$gene_label[k]
-    line_list[[k + 1]] <- data.frame(
+    series_name <- sprintf("%d. %s", k, gene_lbl)
+
+    # Line data (fitted values)
+    line_list[[series_name]] <- data.frame(
       AGE      = age_vals,
-      fitted_z = prot_fitted_z,
-      series   = sprintf("%d. %s", k, gene_lbl),
+      log2_val = prot_fitted,
+      series   = series_name,
+      stringsAsFactors = FALSE
+    )
+    # Scatter data (raw log2 values)
+    scatter_list[[series_name]] <- data.frame(
+      AGE      = age_vals,
+      log2_val = prot_log2v,
+      series   = series_name,
       stringsAsFactors = FALSE
     )
   }
 
   plot_lines <- do.call(rbind, line_list)
-  plot_lines$series <- factor(plot_lines$series, levels = unique(plot_lines$series))
+  plot_scatter <- do.call(rbind, scatter_list)
+
+  all_series <- unique(c(plot_lines$series, plot_scatter$series))
+  # Ensure PTAU first, then proteins in order
+  prot_series <- setdiff(all_series, "PTAU")
+  series_order <- c("PTAU", sort(prot_series))
+  plot_lines$series <- factor(plot_lines$series, levels = series_order)
+  plot_scatter$series <- factor(plot_scatter$series, levels = series_order)
 
   # Colors
-  n_prot_lines <- length(unique(plot_lines$series)) - 1
-  if (n_prot_lines > 0) {
-    prot_colors <- hcl.colors(n_prot_lines, "Dynamic")
-    names(prot_colors) <- setdiff(unique(plot_lines$series), "PTAU")
+  n_prot <- length(prot_series)
+  if (n_prot > 0) {
+    prot_colors <- hcl.colors(n_prot, "Dynamic")
+    names(prot_colors) <- prot_series
     all_colors <- c("PTAU" = "black", prot_colors)
   } else {
     all_colors <- c("PTAU" = "black")
   }
 
   p <- ggplot() +
-    geom_point(data = data.frame(AGE = age_vals, value_z = ptau_raw_z),
-               aes(x = AGE, y = value_z),
-               alpha = 0.15, size = 0.6, color = "grey50") +
+    geom_point(data = plot_scatter,
+               aes(x = AGE, y = log2_val, color = series),
+               alpha = 0.12, size = 0.5) +
     geom_line(data = plot_lines,
-              aes(x = AGE, y = fitted_z, color = series), linewidth = 1.0) +
+              aes(x = AGE, y = log2_val, color = series), linewidth = 1.0) +
     scale_color_manual(values = all_colors) +
     labs(
       title = sprintf("Proteins Tracking PTAU Age-Trend — %s", g),
-      subtitle = sprintf("LOESS span = %.2f | Z-scored | %d subjects | Top %d proteins",
+      subtitle = sprintf("LOESS (degree=1, span=%.2f) | log2 scale | %d subjects | Top %d proteins",
                          LOESS_SPAN, res$n_samples, TOP_N_PLOT),
       x = "Age (years)",
-      y = "Z-score of LOESS Fitted Values",
+      y = "log2 Intensity",
       color = "Series"
     ) +
     theme_bw(base_size = 11) +
@@ -433,11 +457,9 @@ for (g in DX_GROUPS) {
       plot.subtitle = element_text(size = 7.5, color = "grey40")
     )
 
-  ggsave(file.path(out_dir, sprintf("trend_plot_%s.pdf", g)),
-         p, width = 10, height = 7, device = "pdf")
   ggsave(file.path(out_dir, sprintf("trend_plot_%s.png", g)),
          p, width = 10, height = 7, dpi = 300, device = "png")
-  cat(sprintf("Saved: trend_plot_%s.pdf/png\n", g))
+  cat(sprintf("Saved: trend_plot_%s.png\n", g))
 }
 
 # ===========================================================================
@@ -445,17 +467,16 @@ for (g in DX_GROUPS) {
 # ===========================================================================
 cat("\n========== Generating cross-group comparison plot ==========\n")
 
-# Plot A: PTAU trend in each DX group (z-scored, overlaid)
+# Plot A: PTAU trend in each DX group (raw log2, overlaid)
 ptau_trend_list <- list()
 for (g in DX_GROUPS) {
   res <- dx_results[[g]]
   if (is.null(res)) next
   age_vals <- res$age_vals
   ptau_fitted <- res$ptau_fitted
-  ptau_fitted_z <- (ptau_fitted - mean(ptau_fitted, na.rm = TRUE)) / sd(ptau_fitted, na.rm = TRUE)
   ptau_trend_list[[g]] <- data.frame(
     AGE      = age_vals,
-    fitted_z = ptau_fitted_z,
+    log2_val = ptau_fitted,
     DX       = g,
     stringsAsFactors = FALSE
   )
@@ -490,19 +511,17 @@ if (n_conserved > 0) {
 
       eff_span <- max(LOESS_SPAN, 15 / sum(valid_idx))
       prot_fit <- tryCatch(
-        loess(prot_log2v[valid_idx] ~ age_vals[valid_idx], span = eff_span),
+        loess(prot_log2v[valid_idx] ~ age_vals[valid_idx], degree = 1, span = eff_span),
         error = function(e) NULL
       )
       if (is.null(prot_fit)) next
 
       prot_fitted <- rep(NA_real_, length(prot_log2v))
       prot_fitted[valid_idx] <- fitted(prot_fit)
-      prot_fitted_z <- (prot_fitted - mean(prot_fitted, na.rm = TRUE)) /
-                       sd(prot_fitted, na.rm = TRUE)
 
       cdata_list[[g]] <- data.frame(
         AGE      = age_vals,
-        fitted_z = prot_fitted_z,
+        log2_val = prot_fitted,
         Series   = g,
         stringsAsFactors = FALSE
       )
@@ -516,14 +535,14 @@ if (n_conserved > 0) {
       ptau_overlay$Series <- ptau_overlay$DX
 
       p <- ggplot() +
-        geom_line(data = cdata, aes(x = AGE, y = fitted_z, color = Series),
+        geom_line(data = cdata, aes(x = AGE, y = log2_val, color = Series),
                   linewidth = 1.0) +
         scale_color_manual(values = c("EMCI" = "#2c7bb6", "LMCI" = "#fdae61", "AD" = "#d7191c")) +
         labs(
           title = sprintf("%s (%s)", gene, pid),
           subtitle = "LOESS fitted trend across disease stages",
           x = "Age (years)",
-          y = "Z-score"
+          y = "log2 Intensity"
         ) +
         theme_bw(base_size = 10) +
         theme(plot.title = element_text(face = "bold"))
@@ -542,11 +561,9 @@ if (n_conserved > 0) {
         theme = theme(plot.title = element_text(face = "bold", size = 13))
       )
 
-    ggsave(file.path(out_dir, "conserved_proteins_cross_DX.pdf"),
-           cp_multi, width = 14, height = 8, device = "pdf", limitsize = FALSE)
     ggsave(file.path(out_dir, "conserved_proteins_cross_DX.png"),
            cp_multi, width = 14, height = 8, dpi = 300, device = "png", limitsize = FALSE)
-    cat("Saved: conserved_proteins_cross_DX.pdf/png\n")
+    cat("Saved: conserved_proteins_cross_DX.png\n")
   }
 }
 
@@ -621,36 +638,51 @@ hm_p <- ggplot(heatmap_long, aes(x = DX, y = label, fill = rank_capped)) +
     plot.title = element_text(face = "bold")
   )
 
-ggsave(file.path(out_dir, "rank_heatmap_cross_DX.pdf"),
-       hm_p, width = 8, height = 10, device = "pdf")
 ggsave(file.path(out_dir, "rank_heatmap_cross_DX.png"),
        hm_p, width = 8, height = 10, dpi = 300, device = "png")
-cat("Saved: rank_heatmap_cross_DX.pdf/png\n")
+cat("Saved: rank_heatmap_cross_DX.png\n")
 
 # ===========================================================================
-# 11. PTAU trend comparison plot
+# 11. PTAU trend comparison plot (with raw scatter points)
 # ===========================================================================
-ptau_trend_p <- ggplot(ptau_trends, aes(x = AGE, y = fitted_z, color = DX)) +
-  geom_line(linewidth = 1.2) +
+
+# Build scatter data: raw log2(PTAU) per DX group
+ptau_scatter_list <- list()
+for (g in DX_GROUPS) {
+  res <- dx_results[[g]]
+  if (is.null(res)) next
+  ptau_scatter_list[[g]] <- data.frame(
+    AGE      = res$age_vals,
+    log2_val = res$ptau_log2,
+    DX       = g,
+    stringsAsFactors = FALSE
+  )
+}
+ptau_scatter <- do.call(rbind, ptau_scatter_list)
+
+ptau_trend_p <- ggplot() +
+  geom_point(data = ptau_scatter,
+             aes(x = AGE, y = log2_val, color = DX),
+             alpha = 0.15, size = 0.5) +
+  geom_line(data = ptau_trends, aes(x = AGE, y = log2_val, color = DX),
+            linewidth = 1.2) +
   scale_color_manual(values = c("EMCI" = "#2c7bb6", "LMCI" = "#fdae61", "AD" = "#d7191c")) +
   labs(
     title = "PTAU LOESS Trend Across Age — By Disease Stage",
-    subtitle = sprintf("Z-scored fitted values | EMCI: %d, LMCI: %d, AD: %d subjects",
+    subtitle = sprintf("log2(PTAU) raw (points) + LOESS fitted (lines) | EMCI: %d, LMCI: %d, AD: %d subjects",
                        dx_results[["EMCI"]]$n_samples,
                        dx_results[["LMCI"]]$n_samples,
                        dx_results[["AD"]]$n_samples),
     x = "Age (years)",
-    y = "Z-score of LOESS-Fitted log2(PTAU)",
+    y = "log2(PTAU)",
     color = "Disease Stage"
   ) +
   theme_bw(base_size = 11) +
   theme(plot.title = element_text(face = "bold"))
 
-ggsave(file.path(out_dir, "ptau_trend_by_DX.pdf"),
-       ptau_trend_p, width = 8, height = 5.5, device = "pdf")
 ggsave(file.path(out_dir, "ptau_trend_by_DX.png"),
        ptau_trend_p, width = 8, height = 5.5, dpi = 300, device = "png")
-cat("Saved: ptau_trend_by_DX.pdf/png\n")
+cat("Saved: ptau_trend_by_DX.png\n")
 
 # ===========================================================================
 # 12. Summary report

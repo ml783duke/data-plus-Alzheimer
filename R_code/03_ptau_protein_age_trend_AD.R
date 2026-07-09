@@ -167,7 +167,7 @@ ptau_valid  <- !is.na(age_vals) & !is.na(ptau_log2)
 cat(sprintf("Valid (AGE, PTAU) pairs: %d / %d\n", sum(ptau_valid), nrow(df_analysis)))
 
 ptau_loess <- tryCatch(
-  loess(ptau_log2[ptau_valid] ~ age_vals[ptau_valid], span = LOESS_SPAN),
+  loess(ptau_log2[ptau_valid] ~ age_vals[ptau_valid], degree = 1, span = LOESS_SPAN),
   error = function(e) NULL
 )
 
@@ -227,7 +227,7 @@ for (i in seq_len(n_proteins)) {
     results$effective_span[i] <- eff_span
 
     loess_fit <- tryCatch(
-      loess(prot_log2[valid_idx] ~ age_vals[valid_idx], span = eff_span),
+      loess(prot_log2[valid_idx] ~ age_vals[valid_idx], degree = 1, span = eff_span),
       error = function(e) NULL
     )
 
@@ -394,14 +394,15 @@ top_plot$gene_label <- get_gene_label(top_plot)
 ptau_raw_z <- (ptau_log2 - mean(ptau_log2, na.rm = TRUE)) /
               sd(ptau_log2, na.rm = TRUE)
 
-scatter_data <- data.frame(
+scatter_list <- list()
+scatter_list[["PTAU"]] <- data.frame(
   AGE      = age_vals,
   value_z  = ptau_raw_z,
-  series   = "PTAU (raw)"
+  series   = "PTAU"
 )
 
 line_data_list <- list()
-line_data_list[[1]] <- data.frame(
+line_data_list[["PTAU"]] <- data.frame(
   AGE      = age_vals,
   fitted_z = ptau_fitted_z,
   series   = "PTAU",
@@ -419,7 +420,7 @@ for (k in seq_len(nrow(top_plot))) {
 
   eff_span <- max(LOESS_SPAN, 15 / sum(valid_idx))
   prot_fit <- tryCatch(
-    loess(prot_log2v[valid_idx] ~ age_vals[valid_idx], span = eff_span),
+    loess(prot_log2v[valid_idx] ~ age_vals[valid_idx], degree = 1, span = eff_span),
     error = function(e) NULL
   )
   if (is.null(prot_fit)) next
@@ -431,51 +432,64 @@ for (k in seq_len(nrow(top_plot))) {
 
   gene_lbl <- top_plot$gene_label[k]
   corr_val <- top_plot$loess_corr[k]
-  line_data_list[[k + 1]] <- data.frame(
+  series_name <- sprintf("%d. %s", k, gene_lbl)
+
+  line_data_list[[series_name]] <- data.frame(
     AGE      = age_vals,
     fitted_z = prot_fitted_z,
-    series   = sprintf("%d. %s", k, gene_lbl),
+    series   = series_name,
     rank     = k,
     corr_val = corr_val
   )
+  prot_raw_z <- (prot_log2v - mean(prot_log2v, na.rm = TRUE)) /
+                sd(prot_log2v, na.rm = TRUE)
+  scatter_list[[series_name]] <- data.frame(
+    AGE     = age_vals,
+    value_z = prot_raw_z,
+    series  = series_name
+  )
 }
 plot_lines <- do.call(rbind, line_data_list)
-plot_lines$series <- factor(plot_lines$series, levels = unique(plot_lines$series))
+plot_scatter <- do.call(rbind, scatter_list)
 
-n_prot_lines <- length(unique(plot_lines$series)) - 1
+all_series <- unique(c(plot_lines$series, plot_scatter$series))
+prot_series <- sort(setdiff(all_series, "PTAU"))
+series_order <- c("PTAU", prot_series)
+plot_lines$series <- factor(plot_lines$series, levels = series_order)
+plot_scatter$series <- factor(plot_scatter$series, levels = series_order)
+
+n_prot_lines <- length(prot_series)
 if (n_prot_lines > 0) {
   prot_colors <- hcl.colors(n_prot_lines, "Dynamic")
-  names(prot_colors) <- setdiff(unique(plot_lines$series), "PTAU")
+  names(prot_colors) <- prot_series
   all_colors <- c("PTAU" = "black", prot_colors)
 } else {
   all_colors <- c("PTAU" = "black")
 }
 
-legend_labels <- setNames(as.character(plot_lines$series), plot_lines$series)
-for (s in unique(plot_lines$series)) {
-  if (s != "PTAU") {
-    rv <- plot_lines$corr_val[plot_lines$series == s][1]
-    if (!is.na(rv)) {
-      legend_labels[s] <- sprintf("%s  (ρ=%.3f)", s, rv)
-    }
+legend_labels <- setNames(as.character(all_series), all_series)
+for (s in prot_series) {
+  rv <- plot_lines$corr_val[plot_lines$series == s][1]
+  if (!is.na(rv)) {
+    legend_labels[s] <- sprintf("%s  (ρ=%.3f)", s, rv)
   }
 }
 
 combined_p <- ggplot() +
-  geom_point(data = scatter_data,
-             aes(x = AGE, y = value_z),
-             alpha = 0.12, size = 0.6, color = "grey50") +
+  geom_point(data = plot_scatter,
+             aes(x = AGE, y = value_z, color = series),
+             alpha = 0.10, size = 0.4) +
   geom_line(data = plot_lines,
             aes(x = AGE, y = fitted_z, color = series, linewidth = series)) +
   scale_color_manual(values = all_colors, labels = legend_labels) +
   scale_linewidth_manual(values = setNames(
     c(1.4, rep(0.8, n_prot_lines)),
-    c("PTAU", setdiff(unique(plot_lines$series), "PTAU"))
+    c("PTAU", prot_series)
   ), guide = "none") +
   labs(
     title = "Proteins Whose Age-Trajectory Best Tracks PTAU (AD Spectrum)",
     subtitle = sprintf(
-      "LOESS span = %.2f | Z-scored | %d subjects (EMCI+LMCI+AD) | Top %d of %d proteins",
+      "LOESS (degree=1, span=%.2f) | Z-scored | %d subjects (EMCI+LMCI+AD) | Top %d of %d proteins",
       LOESS_SPAN, nrow(df_analysis), TOP_N_PLOT, nrow(results_valid)
     ),
     x = "Age (years)",
@@ -494,11 +508,9 @@ combined_p <- ggplot() +
   ) +
   guides(color = guide_legend(ncol = 1, byrow = TRUE))
 
-ggsave(file.path(out_dir, "combined_ptau_top10_age_trend_AD.pdf"),
-       combined_p, width = 10, height = 7, device = "pdf")
 ggsave(file.path(out_dir, "combined_ptau_top10_age_trend_AD.png"),
        combined_p, width = 10, height = 7, dpi = 300, device = "png")
-cat("Saved: combined_ptau_top10_age_trend_AD.pdf/png\n")
+cat("Saved: combined_ptau_top10_age_trend_AD.png\n")
 
 # ===========================================================================
 # 15. Individual trend plots for top N proteins
@@ -517,7 +529,7 @@ for (k in seq_len(min(TOP_N_PLOT, nrow(top_plot)))) {
 
   eff_span <- max(LOESS_SPAN, 15 / sum(valid_idx))
   prot_fit <- tryCatch(
-    loess(prot_log2v[valid_idx] ~ age_vals[valid_idx], span = eff_span),
+    loess(prot_log2v[valid_idx] ~ age_vals[valid_idx], degree = 1, span = eff_span),
     error = function(e) NULL
   )
   if (is.null(prot_fit)) next
@@ -560,8 +572,6 @@ for (k in seq_len(min(TOP_N_PLOT, nrow(top_plot)))) {
   indiv_plots[[k]] <- p
 
   safe_name <- gsub("[^A-Za-z0-9_]", "_", gene_lbl)
-  ggsave(file.path(out_dir, sprintf("indiv_trend_%02d_%s_AD.pdf", k, safe_name)),
-         p, width = 7, height = 5, device = "pdf")
   ggsave(file.path(out_dir, sprintf("indiv_trend_%02d_%s_AD.png", k, safe_name)),
          p, width = 7, height = 5, dpi = 300, device = "png")
 }
@@ -580,9 +590,6 @@ if (length(indiv_plots) > 0) {
   multi_w <- ifelse(ncol == 1, 8, 14)
   multi_h <- ceiling(n_indiv / ncol) * 5
 
-  ggsave(file.path(out_dir, "indiv_trends_multi_panel_AD.pdf"),
-         multi_p, width = multi_w, height = multi_h, device = "pdf",
-         limitsize = FALSE)
   ggsave(file.path(out_dir, "indiv_trends_multi_panel_AD.png"),
          multi_p, width = multi_w, height = multi_h, dpi = 300, device = "png",
          limitsize = FALSE)

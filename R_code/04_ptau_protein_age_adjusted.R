@@ -356,9 +356,8 @@ volcano_p <- ggplot(plot_data, aes(x = residual_spearman_rho, y = neg_log10_fdr_
   theme_bw(base_size = 11) +
   theme(plot.title = element_text(face = "bold"), plot.subtitle = element_text(size = 8))
 
-ggsave(file.path(out_dir, "volcano_age_adjusted.pdf"), volcano_p, width = 10, height = 7.5, device = "pdf")
 ggsave(file.path(out_dir, "volcano_age_adjusted.png"), volcano_p, width = 10, height = 7.5, dpi = 300, device = "png")
-cat("Saved: volcano_age_adjusted.pdf/png\n")
+cat("Saved: volcano_age_adjusted.png\n")
 
 # ---- 12b. Rho Shift Plot: Raw rho vs Adjusted rho ----
 rho_shift_p <- ggplot(results, aes(x = raw_spearman_rho, y = residual_spearman_rho)) +
@@ -382,9 +381,8 @@ rho_shift_p <- ggplot(results, aes(x = raw_spearman_rho, y = residual_spearman_r
   theme_bw(base_size = 11) +
   theme(plot.title = element_text(face = "bold"), plot.subtitle = element_text(size = 7.5))
 
-ggsave(file.path(out_dir, "rho_shift_raw_vs_adjusted.pdf"), rho_shift_p, width = 8.5, height = 7.5, device = "pdf")
 ggsave(file.path(out_dir, "rho_shift_raw_vs_adjusted.png"), rho_shift_p, width = 8.5, height = 7.5, dpi = 300, device = "png")
-cat("Saved: rho_shift_raw_vs_adjusted.pdf/png\n")
+cat("Saved: rho_shift_raw_vs_adjusted.png\n")
 
 # ---- 12c. Top 30 bar plot (age-adjusted, positive & negative separately) ----
 top30_positive <- head(results[results$direction == "Positive", ], 30)
@@ -418,9 +416,8 @@ bar_p <- ggplot(top30_pos_neg, aes(x = gene_label, y = residual_spearman_rho)) +
   theme_bw(base_size = 10) +
   theme(plot.title = element_text(face = "bold"), plot.subtitle = element_text(size = 7.5))
 
-ggsave(file.path(out_dir, "top30_barplot_age_adjusted.pdf"), bar_p, width = 10, height = 8.5, device = "pdf")
 ggsave(file.path(out_dir, "top30_barplot_age_adjusted.png"), bar_p, width = 10, height = 8.5, dpi = 300, device = "png")
-cat("Saved: top30_barplot_age_adjusted.pdf/png\n")
+cat("Saved: top30_barplot_age_adjusted.png\n")
 
 # ---- 12d. Curated proteins: raw vs adjusted correlation shift ----
 curated_plot_data <- results[results$protein_id %in% curated_ids, ]
@@ -449,11 +446,10 @@ curated_shift_p <- ggplot(curated_plot_data, aes(y = gene_label)) +
     axis.text.y = element_text(face = "italic", size = 6.5)
   )
 
-ggsave(file.path(out_dir, "curated_proteins_rho_shift.pdf"), curated_shift_p,
        width = 10, height = 14, device = "pdf", limitsize = FALSE)
 ggsave(file.path(out_dir, "curated_proteins_rho_shift.png"), curated_shift_p,
        width = 10, height = 14, dpi = 300, device = "png", limitsize = FALSE)
-cat("Saved: curated_proteins_rho_shift.pdf/png\n")
+cat("Saved: curated_proteins_rho_shift.png\n")
 
 # ---- 12e. Combined figure ----
 combined <- (volcano_p | (rho_shift_p + theme(legend.position = "none"))) /
@@ -466,11 +462,10 @@ combined <- (volcano_p | (rho_shift_p + theme(legend.position = "none"))) /
     theme = theme(plot.title = element_text(face = "bold", size = 14))
   )
 
-ggsave(file.path(out_dir, "combined_age_adjusted_analysis.pdf"), combined,
        width = 18, height = 16, device = "pdf", limitsize = FALSE)
 ggsave(file.path(out_dir, "combined_age_adjusted_analysis.png"), combined,
        width = 18, height = 16, dpi = 300, device = "png", limitsize = FALSE)
-cat("Saved: combined_age_adjusted_analysis.pdf/png\n")
+cat("Saved: combined_age_adjusted_analysis.png\n")
 
 # ===========================================================================
 # 13. Summary
