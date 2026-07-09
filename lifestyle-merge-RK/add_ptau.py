@@ -19,7 +19,7 @@ New columns:
   age_at_ptau           — combined age: plasma date preferred, falls back to CSF date
   birth_year            — year of birth (integer)
 
-Outputs (both in lifestyle-merge-RK/output/):
+Outputs:
   lifestyle_baseline_ptau.csv  — full baseline with all new columns (N=4888)
   lifestyle_7var_ptau.csv      — 7 key lifestyle vars + pTau + birth year only
 
@@ -32,16 +32,17 @@ Coverage at baseline (N=4888):
 import os
 import pandas as pd
 
+# Specify data path
 LIFESTYLE_OUT_DIR = os.path.join(
     os.path.abspath(os.path.dirname(__file__)),
-    "lifestyle-merge-RK", "output"
+    "output"
 )
-PTAU_DATA_DIR = "/Users/reinakobayashi/Downloads/Tables_08Jul2026"
-NULISA_FILE   = "/Users/reinakobayashi/Data+/data/BSHRI_PLA_CSF_NULISA_CNS_16Jun2026.csv"
+PTAU_DATA_DIR = ""  # Specify the path to the pTau data derectory
+NULISA_FILE = ""  # Specify the path to the NULISA CSV file
 
-BASELINE_IN   = os.path.join(LIFESTYLE_OUT_DIR, "lifestyle_baseline.csv")
-BASELINE_OUT  = os.path.join(LIFESTYLE_OUT_DIR, "lifestyle_baseline_ptau.csv")
-VAR7_OUT      = os.path.join(LIFESTYLE_OUT_DIR, "lifestyle_7var_ptau.csv")
+BASELINE_IN = os.path.join(LIFESTYLE_OUT_DIR, "lifestyle_baseline.csv")
+BASELINE_OUT = os.path.join(LIFESTYLE_OUT_DIR, "lifestyle_baseline_ptau.csv")
+VAR7_OUT = os.path.join(LIFESTYLE_OUT_DIR, "lifestyle_7var_ptau.csv")
 
 KEY_VARS = ["DHA", "EPA", "HCys", "NPIK", "NPIKTOT", "MH14ALCH", "MH16SMOK"]
 PTAU_COLS = [
@@ -65,7 +66,7 @@ def load_baseline_one_per_rid(fpath, value_col, viscode_val="bl"):
     Keeps the row with the highest non-null value when duplicates exist.
     """
     df = pd.read_csv(fpath)
-    df["RID"]     = pd.to_numeric(df["RID"],     errors="coerce")
+    df["RID"] = pd.to_numeric(df["RID"],     errors="coerce")
     df[value_col] = pd.to_numeric(df[value_col], errors="coerce")
 
     if viscode_val and "VISCODE2" in df.columns:
@@ -100,25 +101,29 @@ section(
 )
 
 fuji = load_baseline_one_per_rid(
-    os.path.join(PTAU_DATA_DIR, "All_Subjects_UPENN_PLASMA_FUJIREBIO_QUANTERIX_08Jul2026.csv"),
+    os.path.join(
+        PTAU_DATA_DIR, "All_Subjects_UPENN_PLASMA_FUJIREBIO_QUANTERIX_08Jul2026.csv"),
     "pT217_F",
 ).rename(columns={"pT217_F": "ptau217_plasma", "EXAMDATE": "ptau217_plasma_date"})
 fuji["ptau217_plasma_source"] = "Fujirebio"
 
 c2n = load_baseline_one_per_rid(
-    os.path.join(PTAU_DATA_DIR, "All_Subjects_C2N_PRECIVITYAD2_PLASMA_08Jul2026.csv"),
+    os.path.join(
+        PTAU_DATA_DIR, "All_Subjects_C2N_PRECIVITYAD2_PLASMA_08Jul2026.csv"),
     "pT217_C2N",
 ).rename(columns={"pT217_C2N": "ptau217_plasma", "EXAMDATE": "ptau217_plasma_date"})
 c2n["ptau217_plasma_source"] = "C2N"
 
-c2n_fill = c2n[~c2n["RID"].isin(set(fuji["RID"])) & c2n["ptau217_plasma"].notna()]
+c2n_fill = c2n[~c2n["RID"].isin(
+    set(fuji["RID"])) & c2n["ptau217_plasma"].notna()]
 plasma = pd.concat([fuji, c2n_fill], ignore_index=True)
 
-n_fuji  = int((plasma["ptau217_plasma_source"] == "Fujirebio").sum())
-n_c2n   = int((plasma["ptau217_plasma_source"] == "C2N").sum())
+n_fuji = int((plasma["ptau217_plasma_source"] == "Fujirebio").sum())
+n_c2n = int((plasma["ptau217_plasma_source"] == "C2N").sum())
 n_match = plasma[plasma["RID"].isin(bl_rids)]["RID"].nunique()
 print(f"  Fujirebio: {n_fuji} | C2N fill: {n_c2n}")
-print(f"  Matched to lifestyle_baseline: {n_match}/{n_patients} ({n_match/n_patients*100:.1f}%)")
+print(
+    f"  Matched to lifestyle_baseline: {n_match}/{n_patients} ({n_match/n_patients*100:.1f}%)")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 3  CSF pTau-217: NULISA
@@ -148,19 +153,23 @@ csf_ptau = (
 
 n_csf_match = csf_ptau[csf_ptau["RID"].isin(bl_rids)]["RID"].nunique()
 print(f"  NULISA baseline (QC passed): {len(csf_ptau)} unique patients")
-print(f"  Matched to lifestyle_baseline: {n_csf_match}/{n_patients} ({n_csf_match/n_patients*100:.1f}%)")
-print(f"  NPQ range: {csf_ptau['ptau217_csf'].min():.2f} – {csf_ptau['ptau217_csf'].max():.2f}")
+print(
+    f"  Matched to lifestyle_baseline: {n_csf_match}/{n_patients} ({n_csf_match/n_patients*100:.1f}%)")
+print(
+    f"  NPQ range: {csf_ptau['ptau217_csf'].min():.2f} – {csf_ptau['ptau217_csf'].max():.2f}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 4  Birth year: PTDEMOG
 # ═══════════════════════════════════════════════════════════════════════════════
 section("STEP 4: Birth year — PTDEMOG PTDOBYY")
 
-demog = pd.read_csv(os.path.join(PTAU_DATA_DIR, "All_Subjects_PTDEMOG_08Jul2026.csv"))
+demog = pd.read_csv(os.path.join(
+    PTAU_DATA_DIR, "All_Subjects_PTDEMOG_08Jul2026.csv"))
 demog["RID"] = pd.to_numeric(demog["RID"], errors="coerce")
 
 # PTDOBYY is stored as a date string (e.g. "1944-01-01") — extract year
-demog["birth_year"] = pd.to_datetime(demog["PTDOBYY"], errors="coerce").dt.year.astype("Int64")
+demog["birth_year"] = pd.to_datetime(
+    demog["PTDOBYY"], errors="coerce").dt.year.astype("Int64")
 
 # One row per patient: PTDOBYY is static so any non-null row is fine
 birth = (
@@ -171,8 +180,10 @@ birth = (
 
 n_by_match = birth[birth["RID"].isin(bl_rids)]["RID"].nunique()
 print(f"  Unique RIDs with birth year: {len(birth)}")
-print(f"  Matched to lifestyle_baseline: {n_by_match}/{n_patients} ({n_by_match/n_patients*100:.1f}%)")
-print(f"  Year range: {int(birth['birth_year'].min())} – {int(birth['birth_year'].max())}")
+print(
+    f"  Matched to lifestyle_baseline: {n_by_match}/{n_patients} ({n_by_match/n_patients*100:.1f}%)")
+print(
+    f"  Year range: {int(birth['birth_year'].min())} – {int(birth['birth_year'].max())}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 5  Merge all → lifestyle_baseline_ptau.csv
@@ -187,23 +198,28 @@ result = (
 )
 
 # Age at collection = collection year − birth year (approximate; only birth year available)
-_plasma_year = pd.to_datetime(result["ptau217_plasma_date"], errors="coerce").dt.year
-_csf_year    = pd.to_datetime(result["ptau217_csf_date"],    errors="coerce").dt.year
+_plasma_year = pd.to_datetime(
+    result["ptau217_plasma_date"], errors="coerce").dt.year
+_csf_year = pd.to_datetime(
+    result["ptau217_csf_date"],    errors="coerce").dt.year
 
 result["age_at_plasma_ptau"] = _plasma_year - result["birth_year"]
-result["age_at_csf_ptau"]    = _csf_year    - result["birth_year"]
+result["age_at_csf_ptau"] = _csf_year - result["birth_year"]
 # Combined: plasma preferred; falls back to CSF when plasma date is missing
-result["age_at_ptau"]        = _plasma_year.fillna(_csf_year) - result["birth_year"]
+result["age_at_ptau"] = _plasma_year.fillna(_csf_year) - result["birth_year"]
 
 n_plasma = result["ptau217_plasma"].notna().sum()
-n_csf    = result["ptau217_csf"].notna().sum()
-n_both   = (result["ptau217_plasma"].notna() & result["ptau217_csf"].notna()).sum()
-n_by     = result["birth_year"].notna().sum()
+n_csf = result["ptau217_csf"].notna().sum()
+n_both = (result["ptau217_plasma"].notna() &
+          result["ptau217_csf"].notna()).sum()
+n_by = result["birth_year"].notna().sum()
 
 print(f"  Output: {len(result)} rows × {result.shape[1]} cols")
-print(f"  ptau217_plasma:  {n_plasma}/{n_patients} ({n_plasma/n_patients*100:.1f}%)")
+print(
+    f"  ptau217_plasma:  {n_plasma}/{n_patients} ({n_plasma/n_patients*100:.1f}%)")
 print(f"  ptau217_csf:     {n_csf}/{n_patients} ({n_csf/n_patients*100:.1f}%)")
-print(f"  Both pTau:       {n_both}/{n_patients} ({n_both/n_patients*100:.1f}%)")
+print(
+    f"  Both pTau:       {n_both}/{n_patients} ({n_both/n_patients*100:.1f}%)")
 print(f"  birth_year:      {n_by}/{n_patients} ({n_by/n_patients*100:.1f}%)")
 
 result.to_csv(BASELINE_OUT, index=False)
