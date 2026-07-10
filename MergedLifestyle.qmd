@@ -109,9 +109,9 @@ datasets <- lapply(datasets, function(x) {
     mutate(RID = as.double(RID))
 })
 
-# Merge all datasets by RID
 
-7lifestyle_sa <- reduce(datasets, full_join, by = "RID") |>
+
+lifestyle_sa <- reduce(datasets, full_join, by = "RID") |>
   select(RID, DHA, EPA, HCys, NPIK, NPIKTOT, MH14ALCH, MH16SMOK)
 
 
@@ -123,74 +123,5 @@ write.csv(lifestyle_sa, "lifestyle-sa.csv", row.names = FALSE)
 
 ```
 
-```{r}
-#| label: merge-subtype
-
-
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-
-subtype_lifestyle_matched_pv <- subtype_lifestyle_matched |>
-  group_by(`Subtype Assignment`) |>
-  summarise(
-    prop_smoke = mean(MH16SMOK, na.rm = TRUE),
-    prop_drink = mean(MH14ALCH, na.rm = TRUE)
-  ) %>%
-  pivot_longer(cols = starts_with("prop_"), 
-               names_to = "behavior", 
-               values_to = "proportion") |>
-  mutate(behavior = recode(behavior, prop_smoke = "Smoke", prop_drink = "Drink"))
-
-ggplot(subtype_lifestyle_matched_pv, aes(x = factor(`Subtype Assignment`), y = proportion, fill = behavior)) +
-  geom_col(position = position_dodge(width = 0.7), width = 0.6) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  labs(
-    x = "Subtype",
-    y = "Proportion (%)",
-    fill = "Behavior",
-    title = "Proportion of People Who Smoke and Drink by Subtype"
-  ) +
-  theme_minimal()
-
-
-# Prepare data for smoking and drinking
-subtype_lifestyle_matched_ALCSMO <- subtype_lifestyle_matched %>%
-  select(`Subtype Assignment`, MH16SMOK, MH14ALCH) %>%
-  pivot_longer(cols = c(MH16SMOK, MH14ALCH), 
-               names_to = "Behavior", 
-               values_to = "Status") %>%
-  filter(!is.na(Status)) %>%
-  mutate(
-    Behavior = recode(Behavior, MH16SMOK = "Smoking", MH14ALCH = "Drinking"),
-    Status = ifelse(Status == 1, "Yes", "No")
-  ) %>%
-  group_by(`Subtype Assignment`, Behavior, Status) %>%
-  summarise(count = n(), .groups = "drop") %>%
-  group_by(`Subtype Assignment`, Behavior) %>%
-  mutate(proportion = count / sum(count))
-
-# Plot stacked bars with facets for Behavior
-ggplot(subtype_lifestyle_matched_ALCSMO, aes(x = factor(`Subtype assignment`), y = proportion, fill = Status)) +
-  geom_col(width = 0.8) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_fill_manual(values = c("Yes" = "#D55E00", "No" = "#0072B2")) +
-  labs(
-    x = "SUBTYPE",
-    y = "PROPORTION (%)",
-    fill = "STATUS",
-    title = "PROPORTION OF SMOKERS AND DRINKERS BY SUBTYPE"
-  ) +
-  facet_wrap(~ Behavior) +
-  theme_minimal() +
-  theme(
-    text = element_text(face = "bold"),
-    plot.title = element_text(hjust = 0.5, size = 16),
-    axis.title = element_text(size = 12),
-    legend.title = element_text(size = 12)
-  )
-
-
-
-
+```{}
 ```
