@@ -18,6 +18,7 @@ library(readxl)
 library(dplyr)
 library(ggplot2)
 library(tidyr)
+library(lubridate)
 
 
 ```
@@ -26,17 +27,10 @@ library(tidyr)
 #| label: read-data
 somascanraw <- read_csv("protein_raw_data/CruchagaLab_CSF_SOMAscan7k_Protein_matrix_postQC_20230620.csv")
 f01_duke_uplcraw <- read_excel("lifestyle_raw_data/f01_duke_uplc.xlsx")
-f02a_leiden_hphraw <- read_excel("lifestyle_raw_data/f02a_leiden_hph.xlsx")
-f02b_leiden_lphraw <- read_excel("lifestyle_raw_data/f02b_leiden_lph.xlsx")
-f03_duke_metabolonraw <- read_excel("lifestyle_raw_data/f03_duke_metabolon.xlsx")
 f04_npiraw <- read_excel("lifestyle_raw_data/f04_npi.xlsx")
-f05_npiqraw <- read_excel("lifestyle_raw_data/f05_npiq.xlsx")
 f06_medhistraw <- read_excel("lifestyle_raw_data/f06_medhist.xlsx")
-f07_bhr_baselineraw <- read_excel("lifestyle_raw_data/f07_bhr_baseline.xlsx")
-f08_bhr_longitudinalraw <- read_excel("lifestyle_raw_data/f08_bhr_longitudinal.xlsx")
-f09_bhr_caregiverraw <- read_excel("lifestyle_raw_data/f09_bhr_caregiver.xlsx")
-f10_ptdemograw <- read_excel("lifestyle_raw_data/f10_ptdemog.xlsx")
 lifestyle_dictionaryraw <- read_excel("lifestyle_raw_data/lifestyle_dictionary.xlsx")
+
 
 
 ```
@@ -68,27 +62,6 @@ f06_medhist <- f06_medhistraw |>
   slice_head(n = 1) |>  
   ungroup()
 
-#f07_bhr_baseline <- f07_bhr_baselineraw |>
-  #select(RID, QID46_9)
-
-#f08_bhr_longitudinal <- f08_bhr_longitudinalraw |>
-  #select(RID, QID50_9, CollectedDate_DRVD) |>
-  #arrange(RID, desc(CollectedDate_DRVD)) |>
-  #split.head(n = 1)
-
-#DHA，EPA，HCys，NPIK，NPIKTOT，MH14ALCH，MH16SMOK
-#f09_bhr_caregiver <- f09_bhr_caregiverraw |>
-  #select(StudyPartnerID, QID44_1_3, QID44_2_3, CollectedDate_DRVD) |>
-  #mutate(CollectedDate_DRVD = as.Date(CollectedDate_DRVD)) |>
-  #arrange(StudyPartnerID, CollectedDate_DRVD) |>
-  #group_by(StudyPartnerID) |>
-  #slice_head(n = 1) |>
-  #ungroup()
-  
-  
-#patient 3265 has 3 visits;
-
- #Study Partner ID is the same as RID, larger numbers because later test
 
 
 
@@ -112,7 +85,14 @@ datasets <- lapply(datasets, function(x) {
 
 
 lifestyle_sa <- reduce(datasets, full_join, by = "RID") |>
-  select(RID, DHA, EPA, HCys, NPIK, NPIKTOT, MH14ALCH, MH16SMOK)
+  select(RID, DHA, EPA, HCys, NPIK, NPIKTOT, MH14ALCH, MH16SMOK, VISDATE, VISCODE2, EXAMDATE.x, EXAMDATE.y) |>
+  mutate(
+    EXAMDATE.y = as.numeric(EXAMDATE.y), as.Date(EXAMDATE.y, origin = "1899-12-30"),
+    EXAMDATE.x = as.character(EXAMDATE.x),
+    EXAMDATE.y = as.character(EXAMDATE.y),
+    VISDATE = as.character(VISDATE),
+    examdate = coalesce(EXAMDATE.x, EXAMDATE.y, VISDATE))
+
 
 
 
@@ -120,8 +100,139 @@ write.csv(lifestyle_sa, "lifestyle-sa.csv", row.names = FALSE)
 
 
 
-
 ```
 
 ```{}
+```
+
+```{r}
+#| label: create-age-variable
+
+# Read the Excel file (assuming the first row contains column names)
+ptdemo <- read_excel("PTDEMOG_excel.xlsx")
+
+# Set first row as column names and remove it
+colnames(ptdemo) <- ptdemo[1, ]
+
+ptdemo <- ptdemo |>
+  slice(-1) |>
+  select(RID, VISCODE2, PTGENDER, PTDOB) |>
+  mutate(RID = as.double(RID))
+
+lifestyle_demo <- ptdemo |>
+  full_join(lifestyle_sa, by = "RID")
+
+
+lifestyle_demo <- lifestyle_demo |>
+  mutate(
+    PTDOB = ymd(PTDOB),       
+    examdate = ymd(examdate),
+    age = as.numeric((examdate - PTDOB) / 365.25)
+  )
+
+
+
+```
+
+```{r, error = TRUE}
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+
+# =============================================
+# Step 1: Prepare the data
+# =============================================
+
+# Ensure ptau217_csf is numeric and filter NAs
+lifestyle_7var_ptau <- lifestyle_7var_ptau %>%
+  mutate(
+    ptau217_csf = as.numeric(ptau217_csf)
+  ) %>%
+  filter(!is.na(ptau217_csf) & !is.na(age_at_csf_ptau) & !is.na(dx_entry))
+
+# Define minimum valid pairs for LOESS
+MIN_VALID_PAIRS <- 10  # Adjust as needed
+LOESS_SPAN <- 0.5      # Smoothness parameter
+
+# =============================================
+# Step 2: Fit LOESS curves per disease group
+# =============================================
+
+loess_fits <- lifestyle_7var_ptau %>%
+  group_by(dx_entry) %>%
+  group_modify(~ {
+    # Extract data for the current group
+    group_data <- .x
+    age_vals <- group_data$age_at_csf_ptau
+    ptau_vals <- group_data$ptau217_csf
+    
+    # Check for valid pairs
+    valid_idx <- !is.na(age_vals) & !is.na(ptau_vals)
+    n_valid <- sum(valid_idx)
+    
+    if (n_valid < MIN_VALID_PAIRS) {
+      message(sprintf("Skipping %s: Only %d valid pairs (minimum %d required).",
+                      first(group_data$dx_entry), n_valid, MIN_VALID_PAIRS))
+      return(tibble::tibble())  # Return empty tibble
+    }
+    
+    # Fit LOESS to the current group
+    loess_fit <- tryCatch(
+      loess(ptau_vals[valid_idx] ~ age_vals[valid_idx], span = LOESS_SPAN, degree = 1),
+      error = function(e) NULL
+    )
+    
+    if (is.null(loess_fit)) {
+      message(sprintf("LOESS fitting failed for %s. Skipping.", first(group_data$dx_entry)))
+      return(tibble::tibble())
+    }
+    
+    # Generate 100 evenly spaced age values for predictions
+    age_seq <- seq(min(age_vals, na.rm = TRUE),
+                   max(age_vals, na.rm = TRUE),
+                   length.out = 100)
+    
+    # Predict LOESS values
+    fitted_vals <- predict(loess_fit, newdata = data.frame(age_at_csf_ptau = age_seq))
+    
+    # Ensure fitted_vals has 100 rows
+    if (length(fitted_vals) != 100) {
+      stop("Prediction failed: fitted_vals does not have 100 rows.")
+    }
+
+    # Create a data frame for the current group
+    tibble::tibble(
+      dx_entry = first(group_data$dx_entry),  # Single value (e.g., "AD")
+      age = age_seq,                           # 100 values
+      fitted = fitted_vals                     # 100 values
+    )
+  }) %>%
+  filter(n() > 0)  # Remove empty groups
+
+# =============================================
+# Step 3: Plot the LOESS curves
+# =============================================
+
+# Check if there are any groups left to plot
+if (nrow(loess_fits) == 0) {
+  stop("No groups had sufficient data for LOESS fitting. Check your dataset.")
+}
+
+# Create the plot
+ggplot(lifestyle_7var_ptau, aes(x = age_at_csf_ptau, y = ptau217_csf, color = dx_entry)) +
+  geom_point(alpha = 0.5, size = 1.5) +  # Raw data points
+  geom_line(
+    data = loess_fits,
+    aes(x = age, y = fitted, group = dx_entry, color = dx_entry),
+    linewidth = 1.2
+  ) +  # LOESS curves
+  labs(
+    title = "PTAU217 CSF Levels by Disease Stage (LOESS Smoothing)",
+    x = "Age at CSF PTAU Measurement",
+    y = "PTAU217 CSF Levels",
+    color = "Disease Stage"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "top")
+
 ```
