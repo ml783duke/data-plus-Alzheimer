@@ -1,0 +1,13 @@
+"Metric","CN","nonCN"
+"Subjects",127,368
+"FDR-sig proteins",3125,4180
+"Sig genes",2872,3806
+"Network nodes",1248,1750
+"Network edges",3661,5575
+"Louvain modules",34,37
+"MAPT interactors",22,74
+"GSK3B axis cov",56.5,65.2
+"MAPK cascade cov",44.4,77.8
+"CDK5 pathway cov",7.1,28.6
+"SRC/FYN/SYK cov",75,91.7
+"PPP phosphatase cov",14.3,42.9

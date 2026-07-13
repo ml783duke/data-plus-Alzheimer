@@ -1,0 +1,235 @@
+---
+title: "Merging ADNI Data"
+author: "Siena Avolio"
+format: html
+editor: visual
+---
+
+## Merging ADNI Data
+
+```{r}
+#| label: load-packages
+
+
+
+library(tidyverse)
+library(readr)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(lubridate)
+
+
+```
+
+```{r, warning=FALSE}
+#| label: read-data
+somascanraw <- read_csv("protein_raw_data/CruchagaLab_CSF_SOMAscan7k_Protein_matrix_postQC_20230620.csv")
+f01_duke_uplcraw <- read_excel("lifestyle_raw_data/f01_duke_uplc.xlsx")
+f04_npiraw <- read_excel("lifestyle_raw_data/f04_npi.xlsx")
+f06_medhistraw <- read_excel("lifestyle_raw_data/f06_medhist.xlsx")
+lifestyle_dictionaryraw <- read_excel("lifestyle_raw_data/lifestyle_dictionary.xlsx")
+
+
+
+```
+
+```{r}
+#| label: select-respective-variables
+
+f01_duke_uplc <- f01_duke_uplcraw |>
+  select(RID, DHA, EPA, HCys, VISCODE2, EXAMDATE) |>
+  arrange(EXAMDATE, .by_group = TRUE) |>  
+  group_by(RID) |>
+  slice_head(n = 1) |>  
+  ungroup()
+
+
+f04_npi <- f04_npiraw |>
+  select(RID, NPIK, NPIKTOT, VISCODE2, EXAMDATE) |>
+  arrange(EXAMDATE, .by_group = TRUE) |>  
+  group_by(RID) |>
+  slice_head(n = 1) |>  
+  ungroup()
+ 
+
+
+f06_medhist <- f06_medhistraw |>
+  select(RID, MH14ALCH,MH16SMOK, VISCODE2, VISDATE) |>
+  arrange(VISDATE, .by_group = TRUE) |>  
+  group_by(RID) |>
+  slice_head(n = 1) |>  
+  ungroup()
+
+
+
+
+```
+
+```{r}
+#| label: merge-lifestyle
+
+datasets <- list(
+  f01_duke_uplc,
+  f04_npi,
+  f06_medhist
+)
+
+# Convert all RID variables to the same type
+datasets <- lapply(datasets, function(x) {
+  x |>
+    mutate(RID = as.double(RID))
+})
+
+
+
+lifestyle_sa <- reduce(datasets, full_join, by = "RID") |>
+  select(RID, DHA, EPA, HCys, NPIK, NPIKTOT, MH14ALCH, MH16SMOK, VISDATE, VISCODE2, EXAMDATE.x, EXAMDATE.y) |>
+  mutate(
+    EXAMDATE.y = as.numeric(EXAMDATE.y), as.Date(EXAMDATE.y, origin = "1899-12-30"),
+    EXAMDATE.x = as.character(EXAMDATE.x),
+    EXAMDATE.y = as.character(EXAMDATE.y),
+    VISDATE = as.character(VISDATE),
+    examdate = coalesce(EXAMDATE.x, EXAMDATE.y, VISDATE))
+
+
+
+
+write.csv(lifestyle_sa, "lifestyle-sa.csv", row.names = FALSE)
+
+
+
+```
+
+```         
+```
+
+```{r}
+# label: create-age-variable
+
+# Read the Excel file (assuming the first row contains column names)
+ptdemo <- read_excel("PTDEMOG_excel.xlsx")
+
+# Set first row as column names and remove it
+colnames(ptdemo) <- ptdemo[1, ]
+
+ptdemo <- ptdemo |>
+  slice(-1) |>
+  select(RID, VISCODE2, PTGENDER, PTDOB) |>
+  mutate(RID = as.double(RID))
+
+lifestyle_demo <- ptdemo |>
+  full_join(lifestyle_sa, by = "RID")
+
+
+lifestyle_demo <- lifestyle_demo |>
+  mutate(
+    PTDOB = ymd(PTDOB),       
+    examdate = ymd(examdate),
+    age = as.numeric((examdate - PTDOB) / 365.25)
+  )
+
+
+
+```
+
+```{r, error = TRUE}
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+
+# =============================================
+# Step 1: Load and prepare the data
+# =============================================
+
+lifestyle_7var_ptau <- read.csv("lifestyle_7var_ptau.csv")
+
+# Ensure ptau217_csf is numeric and filter NAs
+lifestyle_7var_ptau <- lifestyle_7var_ptau %>%
+  mutate(
+    ptau217_csf = as.numeric(ptau217_csf)
+  ) %>%
+  filter(!is.na(ptau217_csf) & !is.na(age_at_csf_ptau) & !is.na(dx_entry))
+
+# Check sample sizes per group
+table(lifestyle_7var_ptau$dx_entry)
+
+# Define minimum valid pairs for LOESS
+MIN_VALID_PAIRS <- 10  # Adjust as needed
+LOESS_SPAN <- 0.75      # Smoothness parameter
+
+# =============================================
+# Step 2: Fit LOESS curves per disease group
+# =============================================
+
+loess_fits <- lifestyle_7var_ptau %>%
+  filter(!(dx_entry == "MCI" |dx_entry == "CN" | dx_entry == "SMC")) %>%
+  group_by(dx_entry) %>%
+  group_modify(~ {
+    # Extract data for the current group
+    group_data <- .x
+    age_vals <- group_data$age_at_csf_ptau
+    ptau_vals <- group_data$ptau217_csf
+    
+    # Check for valid pairs
+    valid_idx <- !is.na(age_vals) & !is.na(ptau_vals)
+    n_valid <- sum(valid_idx)
+    
+    if (n_valid < MIN_VALID_PAIRS) {
+      message(sprintf("Skipping %s: Only %d valid pairs (minimum %d required).",
+                      .y$dx_entry, n_valid, MIN_VALID_PAIRS))
+      return(tibble::tibble())  # Return empty tibble
+    }
+    
+    fit_df <- data.frame(x = age_vals[valid_idx], y = ptau_vals[valid_idx])
+    loess_fit <- tryCatch(
+      loess(y ~ x, span = LOESS_SPAN, degree = 1, data = fit_df),
+      error = function(e) NULL
+    )
+    if (is.null(loess_fit)) {
+      message(sprintf("LOESS fitting failed for %s. Skipping.", .y$dx_entry))
+      return(tibble::tibble())
+    }
+    age_seq <- seq(min(age_vals, na.rm = TRUE), max(age_vals, na.rm = TRUE), length.out = 100)
+    fitted_vals <- predict(loess_fit, newdata = data.frame(x = age_seq))
+    
+    # Ensure fitted_vals has 100 rows
+    if (length(fitted_vals) != 100) {
+      stop("Prediction failed: fitted_vals does not have 100 rows.")
+    }
+
+    # Create a data frame for the current group
+    tibble::tibble(
+      age = age_seq,                           # 100 values
+      fitted = fitted_vals                     # 100 values
+    )
+  }) %>%
+  filter(n() > 0)  # Remove empty groups
+
+# =============================================
+# Step 3: Plot the LOESS curves
+# =============================================
+
+# Check if there are any groups left to plot
+if (nrow(loess_fits) == 0) {
+  stop("No groups had sufficient data for LOESS fitting. Check your dataset.")
+}
+
+# Create the plot
+ggplot(lifestyle_7var_ptau, aes(x = age_at_csf_ptau, y = ptau217_csf, color = dx_entry)) +  # Raw data points
+  geom_line(
+    data = loess_fits,
+    aes(x = age, y = fitted, group = dx_entry, color = dx_entry),
+    linewidth = 1.2
+  ) +  # LOESS curves
+  labs(
+    title = "PTAU217 CSF Levels by Disease Stage (LOESS Smoothing)",
+    x = "Age at CSF PTAU Measurement",
+    y = "PTAU217 CSF Levels",
+    color = "Disease Stage"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+```
