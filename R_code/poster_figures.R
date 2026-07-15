@@ -78,9 +78,9 @@ cat("\n--- Fig 2B: Tau Axis Coverage by DX ---\n")
 
 sum_tbl <- read.csv("output/tau_mechanism_by_DX/comparison_summary.csv")
 axis_data <- data.frame()
-for (i in 6:10) {
+for (i in 7:11) {
   axis_data <- rbind(axis_data, data.frame(
-    Axis = c("GSK3B axis","MAPK cascade","CDK5 pathway","SRC/FYN/SYK","PPP phosphatase")[i-5],
+    Axis = c("GSK3B axis","MAPK cascade","CDK5 pathway","SRC/FYN/SYK","PPP phosphatase")[i-6],
     CN = as.numeric(sum_tbl[i, "CN"]),
     EMCI = as.numeric(sum_tbl[i, "EMCI"]),
     LMCI = as.numeric(sum_tbl[i, "LMCI"]),
