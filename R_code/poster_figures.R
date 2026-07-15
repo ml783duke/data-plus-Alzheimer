@@ -282,3 +282,65 @@ p_1b <- ggplot(df_loess, aes(x = age_at_csf_ptau, y = ptau217_csf, color = dx_en
 
 ggsave(file.path(out_dir, "Fig1B_ptau217_loess_by_DX.png"), p_1b, width = 9, height = 6, dpi = 300)
 cat("Saved: Fig1B\n")
+
+# ===========================================================================
+# Fig 5: Lifestyle forest plot (CSF pTau217, univariate)
+# ===========================================================================
+cat("\n--- Fig 5: Lifestyle Forest Plot ---\n")
+
+# Re-create with Duke colors using the same analysis from script 11
+csv <- read.csv("lifestyle_7var_ptau.csv")
+master <- readxl::read_excel("master_data.xlsx", sheet = "Sheet1")
+sex_lookup <- master[!duplicated(master$RID), c("RID", "PTGENDER")]
+csv <- merge(csv, sex_lookup, by = "RID", all.x = TRUE)
+csv$SEX <- ifelse(csv$PTGENDER == "Male", 1L, 0L)
+
+df_a <- csv[!is.na(csv$ptau217_csf) & !is.na(csv$age_at_csf_ptau), ]
+df_a$PTAU_log2 <- log2(df_a$ptau217_csf)
+
+LIFESTYLE_VARS <- c("DHA", "EPA", "HCys", "NPIK", "NPIKTOT", "MH14ALCH", "MH16SMOK")
+VAR_TYPE <- c("DHA"="cont","EPA"="cont","HCys"="cont","NPIK"="bin","NPIKTOT"="cont","MH14ALCH"="bin","MH16SMOK"="bin")
+var_labels <- c("DHA"="DHA (n-3 PUFA)","EPA"="EPA (n-3 PUFA)","HCys"="Homocysteine",
+  "NPIK"="NPI Sleep Domain","NPIKTOT"="NPI Total Score","MH14ALCH"="Alcohol Abuse History","MH16SMOK"="Smoking Status")
+
+uni <- data.frame(variable=LIFESTYLE_VARS, n=NA_integer_, beta=NA_real_, se=NA_real_,
+                  ci_low=NA_real_, ci_high=NA_real_, p_value=NA_real_)
+for (i in seq_along(LIFESTYLE_VARS)) {
+  v <- LIFESTYLE_VARS[i]
+  df_sub <- df_a[!is.na(df_a[[v]]), ]
+  uni$n[i] <- nrow(df_sub)
+  x_val <- df_sub[[v]]
+  x_model <- if (VAR_TYPE[v]=="cont" && sd(x_val,na.rm=TRUE)>0) as.vector(scale(x_val)) else x_val
+  fit <- lm(PTAU_log2 ~ x_model + age_at_csf_ptau, data = df_sub)
+  s <- summary(fit)
+  uni$beta[i] <- s$coefficients["x_model","Estimate"]
+  uni$se[i] <- s$coefficients["x_model","Std. Error"]
+  uni$p_value[i] <- s$coefficients["x_model","Pr(>|t|)"]
+  uni$ci_low[i] <- uni$beta[i] - 1.96 * uni$se[i]
+  uni$ci_high[i] <- uni$beta[i] + 1.96 * uni$se[i]
+}
+uni$fdr <- p.adjust(uni$p_value, method="BH")
+uni$significant <- uni$fdr < 0.05
+uni$label <- var_labels[uni$variable]
+uni <- uni[order(uni$beta), ]
+uni$label <- factor(uni$label, levels = uni$label)
+uni$sig_anno <- ifelse(uni$significant, "*", "")
+
+p_5 <- ggplot(uni, aes(x = beta, y = label)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey60", linewidth = 0.5) +
+  geom_point(aes(size = n), color = DUKE_BLUE, alpha = 0.9) +
+  geom_errorbarh(aes(xmin = ci_low, xmax = ci_high), height = 0.2, color = DUKE_BLUE, alpha = 0.8, linewidth = 0.8) +
+  geom_text(aes(x = ifelse(beta > 0, ci_high + 0.01, ci_low - 0.01), label = sig_anno),
+            size = 6, color = DUKE_ORANGE, vjust = 0.5) +
+  scale_size_continuous(name = "N", range = c(2.5, 5)) +
+  labs(
+    title = "Lifestyle Factors: Association with CSF pTau217",
+    subtitle = sprintf("Univariate: log2(pTau217) ~ variable + Age | %d subjects | * FDR < 0.05 | None significant",
+                       nrow(df_a)),
+    x = "Standardized Effect (per 1-SD or 1 vs 0)", y = ""
+  ) +
+  theme_poster +
+  theme(panel.grid.major.y = element_blank())
+
+ggsave(file.path(out_dir, "Fig5_lifestyle_forest.png"), p_5, width = 9, height = 4.5, dpi = 300)
+cat("Saved: Fig5\n")
