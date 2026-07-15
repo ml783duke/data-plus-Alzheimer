@@ -1,0 +1,12 @@
+"Metric","CN","EMCI","LMCI","AD"
+"Subjects",148,158,96,124
+"FDR-sig",1223,2667,2836,973
+"Sig genes",1136,2453,2618,894
+"Nodes",374,1043,1117,276
+"Edges",700,2983,3009,471
+"MAPT interactors",6,22,21,6
+"GSK3B axis",21.7,43.5,47.8,13
+"MAPK cascade",16.7,50,55.6,16.7
+"CDK5 pathway",7.1,14.3,14.3,7.1
+"SRC/FYN/SYK",25,58.3,33.3,8.3
+"PPP phosphatase",7.1,7.1,14.3,7.1

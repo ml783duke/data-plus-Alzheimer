@@ -32,17 +32,16 @@ cat("========== From Network to Mechanism: Tau Regulation Model ==========\n")
 # ===========================================================================
 cat("\n--- 0. Loading data ---\n")
 
-master <- read_excel("master_data.xlsx", sheet = "Sheet1")
-dict <- read.csv("protein_raw_data/protein dict.csv", stringsAsFactors = FALSE)
+master <- read.csv("lifestyle_7var_ptau_proteomics.csv")
 
-df_bl <- master[master$VISCODE2 == "bl" & !is.na(master$PTAU), ]
-protein_cols <- grep("^X[0-9]+\\.[0-9]+$", colnames(df_bl), value = TRUE)
+df_bl <- master[!is.na(master$ptau217_csf) & !is.na(master$dx_entry), ]
+protein_cols <- colnames(df_bl)[21:ncol(df_bl)]
 
 convert_protein <- function(x) { x[x == "NA" | x == ""] <- NA; as.numeric(x) }
 df_bl[protein_cols] <- lapply(df_bl[protein_cols], convert_protein)
 
 # Run correlation
-df_bl$PTAU_log2 <- log2(df_bl$PTAU)
+df_bl$PTAU_log2 <- log2(df_bl$ptau217_csf)
 ptau_vals <- df_bl$PTAU_log2
 
 missing_rate <- sapply(df_bl[protein_cols], function(x) mean(is.na(x)) * 100)
@@ -62,8 +61,7 @@ for (i in seq_len(ncol(protein_log2))) {
 }
 results <- results[!is.na(results$p_value), ]
 results$fdr <- p.adjust(results$p_value, method = "BH")
-results <- merge(results, dict[, c("Analytes", "EntrezGeneSymbol", "TargetFullName", "UniProt")],
-                 by.x = "protein_id", by.y = "Analytes", all.x = TRUE)
+results$EntrezGeneSymbol <- gsub("\\.[0-9]+\\.[0-9]+$", "", results$protein_id)
 
 sig <- results[results$fdr < 0.05, ]
 sig_genes_all <- unique(sig$EntrezGeneSymbol[!is.na(sig$EntrezGeneSymbol) & sig$EntrezGeneSymbol != ""])

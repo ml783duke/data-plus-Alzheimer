@@ -1,6 +1,6 @@
 ###############################################################################
 # 12_tau_mechanism_CN_vs_nonCN.R
-# Tau Mechanism Analysis: CN vs non-CN (EMCI+LMCI+AD)
+# Tau Mechanism Analysis: AD vs non-AD (EMCI+LMCI+AD)
 # - Run full pathway + network analysis per group
 # - Compare communities, enrichment, functional categories, candidates
 ###############################################################################
@@ -10,10 +10,10 @@ library(ggplot2); library(clusterProfiler); library(org.Hs.eg.db)
 library(enrichplot); library(patchwork)
 
 set.seed(42)
-out_dir <- "output/tau_mechanism_CN_vs_nonCN"
+out_dir <- "output/tau_mechanism_AD_vs_nonAD"
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
-cat("========== Tau Mechanism: CN vs non-CN ==========\n")
+cat("========== Tau Mechanism: AD vs non-AD ==========\n")
 
 # ---- 0. Load data ----
 cat("\n--- Loading ---\n")
@@ -136,8 +136,8 @@ run_tau_mechanism <- function(df_grp, grp_label) {
 }
 
 # ---- 2. Run both groups ----
-df_cn <- df_bl[df_bl$dx_entry == "CN", ]
-df_noncn <- df_bl[df_bl$dx_entry %in% c("EMCI", "LMCI", "AD"), ]
+df_cn <- df_bl[df_bl$dx_entry == "AD", ]
+df_noncn <- df_bl[df_bl$dx_entry %in% c("CN", "EMCI", "LMCI"), ]
 res_cn <- run_tau_mechanism(df_cn, "CN")
 res_nc <- run_tau_mechanism(df_noncn, "non-CN")
 
@@ -153,8 +153,8 @@ cat_all$Category1 <- factor(cat_all$Category1,
 
 p_cat <- ggplot(cat_all[cat_all$Category1!="Others",], aes(x=Category1, y=N, fill=Group)) +
   geom_col(position="dodge", alpha=0.85) +
-  scale_fill_manual(values=c("CN"="#2c7bb6","non-CN"="#d7191c")) +
-  labs(title="Functional Categories: CN vs non-CN", subtitle=sprintf("CN: %d genes | non-CN: %d genes", res_cn$n_genes, res_nc$n_genes),
+  scale_fill_manual(values=c("AD"="#2c7bb6","non-AD"="#d7191c")) +
+  labs(title="Functional Categories: AD vs non-AD", subtitle=sprintf("AD: %d genes | non-AD: %d genes", res_cn$n_genes, res_nc$n_genes),
        x="", y="Number of Genes") +
   theme_bw(11) + theme(plot.title=element_text(face="bold"), axis.text.x=element_text(angle=30,hjust=1))
 
@@ -167,8 +167,8 @@ mod_all <- rbind(
 
 p_mod <- ggplot(mod_all, aes(x=Size, fill=Group)) +
   geom_density(alpha=0.5) +
-  scale_fill_manual(values=c("CN"="#2c7bb6","non-CN"="#d7191c")) +
-  labs(title="Module Size Distribution: CN vs non-CN", x="Module Size (# genes)", y="Density") +
+  scale_fill_manual(values=c("AD"="#2c7bb6","non-AD"="#d7191c")) +
+  labs(title="Module Size Distribution: AD vs non-AD", x="Module Size (# genes)", y="Density") +
   theme_bw(11) + theme(plot.title=element_text(face="bold"))
 ggsave(file.path(out_dir, "module_size_distribution.png"), p_mod, width=7, height=4.5, dpi=200)
 
@@ -179,8 +179,8 @@ axis_all <- rbind(res_cn$axis_sum %>% mutate(Group="CN"),
 p_axis <- ggplot(axis_all, aes(x=Axis, y=Coverage, fill=Group)) +
   geom_col(position="dodge", alpha=0.85) +
   geom_text(aes(label=sprintf("%.0f%%",Coverage)), position=position_dodge(0.9), vjust=-0.3, size=3) +
-  scale_fill_manual(values=c("CN"="#2c7bb6","non-CN"="#d7191c")) +
-  labs(title="Tau Signaling Axis Coverage: CN vs non-CN",
+  scale_fill_manual(values=c("AD"="#2c7bb6","non-AD"="#d7191c")) +
+  labs(title="Tau Signaling Axis Coverage: AD vs non-AD",
        subtitle=sprintf("%% of curated axis genes that are PTAU-significant"), x="", y="Coverage (%)") +
   ylim(0,105) + theme_bw(11) + theme(plot.title=element_text(face="bold"))
 ggsave(file.path(out_dir, "axis_coverage_comparison.png"), p_axis, width=8, height=5, dpi=200)
@@ -199,7 +199,7 @@ print(mapt_venn)
 p_venn <- ggplot(mapt_venn, aes(x=Category, y=Count, fill=Category)) +
   geom_col(alpha=0.85) + geom_text(aes(label=Count), vjust=-0.3, size=5) +
   scale_fill_manual(values=c("CN only"="#2c7bb6","Shared"="#984ea3","non-CN only"="#d7191c")) +
-  labs(title="MAPT Interactors: CN vs non-CN", subtitle=sprintf("Shared: %d genes", length(shared_mapt)),
+  labs(title="MAPT Interactors: AD vs non-AD", subtitle=sprintf("Shared: %d genes", length(shared_mapt)),
        x="", y="Number of Genes") +
   theme_bw(11) + theme(plot.title=element_text(face="bold"), legend.position="none")
 ggsave(file.path(out_dir, "mapt_venn.png"), p_venn, width=6, height=4.5, dpi=200)
