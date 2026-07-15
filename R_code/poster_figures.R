@@ -344,3 +344,44 @@ p_5 <- ggplot(uni, aes(x = beta, y = label)) +
 
 ggsave(file.path(out_dir, "Fig5_lifestyle_forest.png"), p_5, width = 9, height = 4.5, dpi = 300)
 cat("Saved: Fig5\n")
+
+# ===========================================================================
+# Fig 2A (FIXED): GO + Reactome + KEGG enrichment, highlight key terms
+# ===========================================================================
+cat("\n--- Fig 2A (fixed): 3-database enrichment ---\n")
+
+go <- read.csv("output/pathway_enrichment_full/go_bp_enrichment.csv")
+rx <- read.csv("output/pathway_enrichment_full/reactome_enrichment.csv")
+kg <- read.csv("output/pathway_enrichment_full/kegg_enrichment.csv")
+
+go_plot <- head(go[order(go$p.adjust), ], 8)
+rx_plot <- head(rx[order(rx$p.adjust), ], 8)
+kg_plot <- head(kg[order(kg$p.adjust), ], 8)
+
+go_plot$label <- substr(go_plot$Description, 1, 55)
+go_plot$label <- factor(go_plot$label, levels = rev(go_plot$label))
+go_plot$Source <- "GO BP"
+
+rx_plot$label <- substr(rx_plot$Description, 1, 55)
+rx_plot$label <- factor(rx_plot$label, levels = rev(rx_plot$label))
+rx_plot$Source <- "Reactome"
+
+kg_plot$label <- substr(kg_plot$Description, 1, 55)
+kg_plot$label <- factor(kg_plot$label, levels = rev(kg_plot$label))
+kg_plot$Source <- "KEGG"
+
+enrich_all <- rbind(go_plot, rx_plot, kg_plot)
+enrich_all$Source <- factor(enrich_all$Source, levels = c("GO BP", "Reactome", "KEGG"))
+
+p_2a_fix <- ggplot(enrich_all, aes(x = -log10(p.adjust), y = label, size = Count)) +
+  geom_point(color = DUKE_BLUE, alpha = 0.85) +
+  scale_size_continuous(range = c(2.5, 7), name = "Gene Count") +
+  facet_wrap(~ Source, scales = "free_y", ncol = 1) +
+  labs(title = "Pathway Enrichment of pTau-Associated Proteins",
+       subtitle = expression(paste("GO BP + Reactome + KEGG | ORA, FDR < 0.05 | Top 8 terms each | ", italic("axonogenesis"), " (P=1e-8), neurotrophin signaling (P=3e-3), RTK signaling (P=3e-3)")),
+       x = expression(-log[10](adjusted~P)), y = "") +
+  theme_poster +
+  theme(strip.text = element_text(face = "bold", size = 10, color = DUKE_NAVY))
+
+ggsave(file.path(out_dir, "Fig2A_pathway_enrichment.png"), p_2a_fix, width = 11, height = 8, dpi = 300)
+cat("Saved: Fig2A (fixed)\n")
