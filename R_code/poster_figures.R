@@ -231,3 +231,54 @@ cat("Saved: Fig4A\n")
 
 cat("\n========== Done ==========\n")
 cat(sprintf("Output: %s\n", normalizePath(out_dir)))
+
+# ===========================================================================
+# Fig 1B: LOESS pTau217 trend by DX
+# ===========================================================================
+cat("\n--- Fig 1B: LOESS pTau217 by DX ---\n")
+
+csv <- read.csv("lifestyle_7var_ptau_proteomics.csv")
+df_loess <- csv %>%
+  mutate(ptau217_csf = as.numeric(ptau217_csf)) %>%
+  filter(!is.na(ptau217_csf) & !is.na(age_at_csf_ptau) & !is.na(dx_entry),
+         dx_entry %in% c("CN", "EMCI", "LMCI", "AD"))
+
+# Fit LOESS per DX
+MIN_VALID_PAIRS <- 10
+LOESS_SPAN <- 0.75
+
+loess_fits <- df_loess %>%
+  group_by(dx_entry) %>%
+  group_modify(~ {
+    age_vals <- .x$age_at_csf_ptau; ptau_vals <- .x$ptau217_csf
+    valid_idx <- !is.na(age_vals) & !is.na(ptau_vals)
+    if (sum(valid_idx) < MIN_VALID_PAIRS) return(tibble::tibble())
+    fit_df <- data.frame(x = age_vals[valid_idx], y = ptau_vals[valid_idx])
+    lo <- tryCatch(loess(y ~ x, span = LOESS_SPAN, degree = 1, data = fit_df),
+                   error = function(e) NULL)
+    if (is.null(lo)) return(tibble::tibble())
+    age_seq <- seq(min(age_vals, na.rm = TRUE), max(age_vals, na.rm = TRUE), length.out = 100)
+    tibble::tibble(age = age_seq, fitted = predict(lo, data.frame(x = age_seq)))
+  }) %>% filter(n() > 0)
+
+df_loess$dx_entry <- factor(df_loess$dx_entry, levels = c("CN", "EMCI", "LMCI", "AD"))
+
+p_1b <- ggplot(df_loess, aes(x = age_at_csf_ptau, y = ptau217_csf, color = dx_entry)) +
+  geom_point(alpha = 0.25, size = 1.2) +
+  geom_line(data = loess_fits, aes(x = age, y = fitted, group = dx_entry, color = dx_entry),
+            linewidth = 1.4) +
+  scale_color_manual(values = dx_colors, name = "") +
+  labs(
+    title = expression(paste("CSF pTau217 Age Trajectories by Disease Stage")),
+    subtitle = sprintf("LOESS (degree=1, span=%.2f) | %d subjects | CN+EMCI+LMCI+AD",
+                       LOESS_SPAN, nrow(df_loess)),
+    x = "Age at CSF Collection (years)",
+    y = "CSF pTau217 (pg/mL)"
+  ) +
+  theme_poster +
+  theme(legend.position = c(0.12, 0.75),
+        legend.background = element_rect(fill = "white", color = "grey90"),
+        legend.key.size = unit(0.4, "cm"))
+
+ggsave(file.path(out_dir, "Fig1B_ptau217_loess_by_DX.png"), p_1b, width = 9, height = 6, dpi = 300)
+cat("Saved: Fig1B\n")
