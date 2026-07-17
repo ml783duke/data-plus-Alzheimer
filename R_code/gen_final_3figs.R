@@ -5,7 +5,9 @@ library(ggplot2); library(dplyr); library(tidyr); library(igraph); library(ggrap
 
 out_dir <- "output_figure"
 DUKE_NAVY  <- "#003087"; DUKE_BLUE <- "#00539B"; DUKE_LIGHT <- "#7288A0"; DUKE_ORANGE <- "#C84E00"
-dx_colors  <- c("CN"="#8BA5BF","EMCI"=DUKE_NAVY,"LMCI"=DUKE_BLUE,"AD"=DUKE_ORANGE)
+# DX color palette: coordinated Duke-adjacent, clearly distinguishable across 4 groups
+# CN = grey-blue | EMCI = Duke Navy | LMCI = dark green | AD = Duke Orange
+dx_colors  <- c("CN"="#7288A0","EMCI"="#003087","LMCI"="#1B6B3A","AD"="#C84E00")
 
 theme_post <- theme_minimal(base_size=16) +
   theme(plot.title=element_text(face="bold",size=22,color=DUKE_NAVY),
@@ -76,72 +78,87 @@ mapt_counts <- data.frame(
   Count=c(sum(mapt_mat$CN),sum(mapt_mat$EMCI),sum(mapt_mat$LMCI),sum(mapt_mat$AD)))
 mapt_counts$DX <- factor(mapt_counts$DX, levels=c("CN","EMCI","LMCI","AD"))
 
-p2 <- ggplot(mapt_counts, aes(x=DX, y=Count, fill=DX)) +
-  geom_col(alpha=0.9, width=0.55) +
-  geom_text(aes(label=Count), vjust=-0.5, size=10, color=DUKE_NAVY, fontface="bold") +
-  scale_fill_manual(values=dx_colors, guide="none") +
-  scale_y_continuous(limits=c(0, 28), expand=c(0,0)) +
-  labs(title="Tau-Interacting Proteins Peak at EMCI",
-       subtitle=sprintf("MAPT-interacting proteins significantly correlated with pTau217 | %d total unique",
-                        nrow(mapt_mat)),
-       x="", y="Number of MAPT-Interacting Proteins") +
+# Subtitle styling: find the subtitle's y-position relative to plot area
+p2_base <- ggplot(mapt_counts, aes(x = DX, y = Count, fill = DX)) +
+  geom_col(alpha = 0.9, width = 0.55) +
+  geom_text(aes(label = Count), vjust = -0.5, size = 10, color = DUKE_NAVY, fontface = "bold") +
+  scale_fill_manual(values = dx_colors, guide = "none") +
+  scale_y_continuous(limits = c(0, 28), expand = c(0, 0)) +
+  labs(title = "Tau-Interacting Proteins Peak at EMCI",
+       subtitle = "", x = "", y = "Number of MAPT-Interacting Proteins") +
   theme_post
+
+# Add boxed MAPT → pTau217 as annotation (replaces subtitle)
+p2 <- p2_base +
+  annotate("label", x = 2.05, y = 26.2, label = "MAPT",
+           fill = "white", color = DUKE_NAVY, size = 4.5, fontface = "bold",
+           label.padding = unit(0.2, "lines")) +
+  annotate("text",  x = 2.20, y = 26.2, label = "→ pTau217",
+           size = 5, color = DUKE_LIGHT, hjust = 0, fontface = "italic")
 
 ggsave(file.path(out_dir,"Fig2_mapt_EMCI_peak.png"), p2, width=10, height=8, dpi=300)
 cat("Fig2 done\n")
 
-cat("\n=== FIGURE 3: Tau Signaling Map ===\n")
+cat("\n=== FIGURE 3: GO BP Enrichment by DX (Top 5 per group) ===\n")
 
-omni_url <- "https://omnipathdb.org/interactions?format=tsv&fields=sources,references&genesymbols=1"
-tmp <- tempfile(fileext=".tsv"); download.file(omni_url,tmp,method="auto")
-omni <- read.delim(tmp,stringsAsFactors=FALSE)
-sig <- read.csv("output/tau_mechanism_analysis/gene_functional_classification.csv")
-gene_rho <- sig %>% filter(EntrezGeneSymbol!="",!is.na(rho_median)) %>%
-  group_by(EntrezGeneSymbol) %>% summarise(rho=median(rho_median,na.rm=TRUE),.groups="drop")
+# Load enrichment data
+enrich <- read.csv("output/pathway_enrichment_by_DX/enrichment_by_DX.csv")
+go <- enrich[enrich$Source == "GO_BP", ]
 
-tau_axes <- list(
-  "GSK3B axis"=c("GSK3B","GSK3A","AKT1","AKT2","PTEN","PDPK1","PRKCA","PRKCB","PRKCG","PRKCZ","PPP2R1A","DYRK1A"),
-  "MAPK cascade"=c("MAPK1","MAPK3","MAPK8","MAPK14","MAP2K1","MAP2K2","BRAF","RAF1","GRB2","HRAS","KRAS","RPS6KA3","RPS6KB1"),
-  "CDK5 pathway"=c("CDK5","PPP3CA","PPP3R1","PPP5C","CAMK2A","ABL1","ABL2"),
-  "SRC/FYN/SYK"=c("SRC","FYN","SYK","LYN","PTK2","PTK2B","PTPN11"),
-  "PPP phosphatase"=c("PPP1CA","PPP1CB","PPP1CC","PPP2CA","PPP2CB","PPP2R5A","PPP3CB","PPP3CC"))
+# Top 5 per DX group -> union of all terms
+go_top5 <- go %>%
+  group_by(DX) %>%
+  slice_min(p.adjust, n = 5) %>%
+  ungroup()
 
-focus <- unique(c("MAPT", intersect(unlist(tau_axes), gene_rho$EntrezGeneSymbol)))
-inter_focus <- omni[omni$source_genesymbol %in% focus & omni$target_genesymbol %in% focus, ]
-edges <- data.frame(from=inter_focus$source_genesymbol, to=inter_focus$target_genesymbol)
-nodes <- data.frame(gene=unique(c(edges$from, edges$to)))
-nodes$rho <- gene_rho$rho[match(nodes$gene, gene_rho$EntrezGeneSymbol)]
-nodes$axis <- "Other"
-for (ax in names(tau_axes)) nodes$axis[nodes$gene %in% tau_axes[[ax]]] <- ax
-nodes$axis[nodes$gene=="MAPT"] <- "MAPT"
-g_tau <- graph_from_data_frame(edges, directed=FALSE, vertices=nodes)
-V(g_tau)$degree <- degree(g_tau)
+# Union of top 5 terms across all DX groups
+terms_all <- unique(go_top5$Description)
+cat(sprintf("Union of top 5 terms: %d unique pathways\n", length(terms_all)))
 
-ax_col <- c("MAPT"="black","GSK3B axis"=DUKE_BLUE,"MAPK cascade"=DUKE_ORANGE,
-            "CDK5 pathway"=DUKE_LIGHT,"SRC/FYN/SYK"="#1B6B3A",
-            "PPP phosphatase"="#6B3A8A","Other"="grey85")
+# Keep only those terms from the full dataset
+df <- go[go$Description %in% terms_all, ]
+df$DX <- factor(df$DX, levels = c("CN", "EMCI", "LMCI", "AD"))
 
-set.seed(42)
-layout_df <- create_layout(g_tau, layout="stress")
-mapt_xy <- layout_df[layout_df$name=="MAPT", c("x","y")]
+# Flag whether this term is in this DX's own top 5
+df$in_top5 <- paste(df$Description, df$DX) %in% paste(go_top5$Description, go_top5$DX)
 
-p3 <- ggraph(g_tau, layout="stress") +
-  geom_edge_link(color="grey55", alpha=0.7) +
-  geom_node_point(aes(size=degree, fill=axis), shape=21, color="grey40", stroke=0.3) +
-  geom_node_text(aes(label=ifelse(name=="MAPT","",name), size=3.5),
-                 repel=TRUE, max.overlaps=60, box.padding=0.6, color=DUKE_NAVY, force=2) +
-  annotate("text", x=mapt_xy$x, y=mapt_xy$y-0.3, label="MAPT", size=9, fontface="bold", color="black") +
-  scale_fill_manual(values=ax_col, name="Signaling Axis") +
-  scale_size_continuous(range=c(2,10), guide="none") +
-  labs(title="Five Signaling Axes Converge on Tau",
-       subtitle=sprintf("%d nodes, %d edges | Multi-pathway redundancy may explain single-target trial failures",
-                        vcount(g_tau), ecount(g_tau))) +
-  theme_void() +
-  theme(plot.title=element_text(face="bold",size=22,color=DUKE_NAVY,hjust=0.5),
-        plot.subtitle=element_text(size=14,color=DUKE_LIGHT,hjust=0.5),
-        plot.margin=margin(3,3,3,3),
-        legend.position="bottom", legend.text=element_text(size=14),
-        legend.title=element_text(size=15))
+# Sort terms: 4-group terms first, then partial
+term_groups <- table(go_top5$Description)
+term_order <- names(sort(term_groups, decreasing = TRUE))
+df$Description <- factor(df$Description, levels = rev(term_order))
 
-ggsave(file.path(out_dir,"Fig3_tau_signaling_map.png"), p3, width=14, height=12, dpi=300)
+# Short labels
+make_label <- function(d) {
+  ifelse(d == "neuron projection morphogenesis", "Neuron projection\nmorphogenesis",
+  ifelse(d == "plasma membrane bounded cell projection morphogenesis", "Plasma membrane bounded\ncell projection morphogenesis",
+  ifelse(d == "cell projection morphogenesis", "Cell projection\nmorphogenesis",
+  ifelse(d == "axonogenesis", "Axonogenesis",
+  ifelse(d == "cell morphogenesis involved in neuron differentiation", "Cell morphogenesis involved\nin neuron differentiation",
+  ifelse(d == "axon development", "Axon development", d))))))
+}
+df$label <- factor(make_label(as.character(df$Description)),
+                   levels = rev(make_label(term_order)))
+
+# DX labels above first row
+first_term <- names(sort(term_groups, decreasing = TRUE))[1]
+df_first <- df[df$Description == first_term & df$in_top5, ]
+df_first <- df_first[match(c("CN","EMCI","LMCI","AD"), df_first$DX), ]
+
+# Only plot points that are in each group's top 5
+df_plot <- df[df$in_top5, ]
+
+p3 <- ggplot(df_plot, aes(x = RichFactor, y = label, color = DX)) +
+  geom_point(size = 5, alpha = 0.9) +
+  geom_text(data = df_first,
+            aes(x = RichFactor, y = length(term_order) + 0.35, label = DX, color = DX),
+            size = 5.5, fontface = "bold", vjust = 0) +
+  scale_color_manual(values = dx_colors, guide = "none") +
+  scale_x_continuous(limits = c(0.29, 0.74), expand = c(0, 0),
+                     labels = scales::label_number(accuracy = 0.05)) +
+  labs(title = "GO Biological Process Enrichment by Disease Stage",
+       subtitle = "",
+       x = "RichFactor", y = "") +
+  theme_post
+
+ggsave(file.path(out_dir, "Fig3_tau_signaling_map.png"), p3, width = 13, height = 8.5, dpi = 300)
 cat("Fig3 done\n\nALL DONE\n")
