@@ -219,7 +219,7 @@ run_ptau_analysis <- function(df, ptau_col, age_col, label, n_row) {
         "Neuropsychiatric" = "#C44E52",
         "Substance Use" = "#D2691E"
       ),
-      na.value = "grey50",
+      na.value = "grey30",
       name = "Category"
     ) +
     scale_y_discrete(
