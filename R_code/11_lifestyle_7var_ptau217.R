@@ -11,6 +11,7 @@
 library(readxl)
 library(dplyr)
 library(ggplot2)
+library(ggtext)
 
 set.seed(42)
 
@@ -29,9 +30,9 @@ var_labels <- c(
   "MH14ALCH"="Alcohol Abuse History", "MH16SMOK"="Smoking Status"
 )
 var_cat <- c(
-  "DHA"="Nutrition", "EPA"="Nutrition", "HCys"="Nutrition",
-  "NPIK"="Neuropsychiatric", "NPIKTOT"="Neuropsychiatric",
-  "MH14ALCH"="Substance Use", "MH16SMOK"="Substance Use"
+  "DHA (n-3 PUFA)"="Nutrition", "EPA (n-3 PUFA)"="Nutrition", "Homocysteine"="Nutrition",
+  "NPI Sleep Domain"="Neuropsychiatric", "NPI Total Score"="Neuropsychiatric",
+  "Alcohol Abuse History"="Substance Use", "Smoking Status"="Substance Use"
 )
 
 cat("========== Lifestyle → pTau217 (Plasma & CSF) ==========\n")
@@ -53,7 +54,12 @@ run_ptau_analysis <- function(df, ptau_col, age_col, label, n_row) {
 
   # Filter to complete pTau + AGE (SEX optional)
   df_a <- df[!is.na(df[[ptau_col]]) & !is.na(df[[age_col]]), ]
-  df_a$PTAU_log2 <- log2(df_a[[ptau_col]])
+  #CSF ALREADY LOGGED BUT NOT PLASMA
+  if (ptau_col == "ptau217_csf") {
+    df_a$PTAU_log2 <- df_a[[ptau_col]]
+  } else {
+    df_a$PTAU_log2 <- log2(df_a[[ptau_col]])
+  }
   df_a$AGE_val <- df_a[[age_col]]
   # Only use SEX if >50% of subjects have it
   sex_coverage <- sum(!is.na(df_a$SEX)) / nrow(df_a)
@@ -175,18 +181,53 @@ run_ptau_analysis <- function(df, ptau_col, age_col, label, n_row) {
   multi_plot$y_label <- factor(multi_plot$label, levels = multi_plot$label)
   multi_plot$p_label <- sprintf("P=%.3f", multi_plot$P)
   multi_plot$p_label[multi_plot$P < 0.001] <- "P<0.001"
+  multi_plot$lsgroup <- case_when(
+    multi_plot$label %in% c("Homocysteine", "EPA (n-3 PUFA)", "DHA (n-3 PUFA)") ~ "Nutrition",
+    multi_plot$label %in% c("NPI Total Score", "NPI Sleep Domain") ~ "Neuropsychiatric",
+    multi_plot$label %in% c("Alcohol Abuse History", "Smoking Status") ~ "Substance Use",
+    TRUE ~ "Covariate"
+    
+  )
+  multi_plot$label_color <- case_when(
+    multi_plot$lsgroup == "Nutrition" ~ "#D4A017",
+    multi_plot$lsgroup == "Neuropsychiatric" ~ "#C44E52",
+    multi_plot$lsgroup == "Substance Use" ~ "#D2691E",
+    TRUE ~ "black"
+  )
+  multi_plot$label_html <- paste0(
+    "<span style='color:", 
+    multi_plot$label_color,
+    "'>",
+    multi_plot$label,
+    "</span>"
+  )
 
-  p_multi <- ggplot(multi_plot, aes(x = Beta, y = y_label, color = is_lifestyle)) +
+
+  p_multi <- ggplot(multi_plot, aes(x = Beta, y = y_label, color = lsgroup)) +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey50", alpha = 0.6) +
     geom_point(size = 3, alpha = 0.9) +
     geom_errorbarh(aes(xmin = ci_low, xmax = ci_high), height = 0.2, alpha = 0.9) +
-    geom_text(aes(x = max(ci_high) * 0.85, label = p_label),
-              size = 3.2, hjust = 1, color = "grey30") +
-    scale_color_manual(values = c("TRUE" = "#2c7bb6", "FALSE" = "grey50"),
-                        labels = c("TRUE" = "Lifestyle", "FALSE" = "Covariate"), name = "") +
+    geom_text(
+      aes(x = Beta, y = y_label, label = p_label),
+      nudge_y = 0.30,
+      size = 3.2,
+      color = "grey30"
+    ) +
+    scale_color_manual(
+      values = c(
+        "Nutrition" = "#D4A017",
+        "Neuropsychiatric" = "#C44E52",
+        "Substance Use" = "#D2691E"
+      ),
+      na.value = "grey50",
+      name = "Category"
+    ) +
+    scale_y_discrete(
+      labels = multi_plot$label_html
+    ) +
     labs(
-      title = paste("Multivariable Model:", label),
-      subtitle = sprintf("log2(pTau) ~ 7 lifestyle + AGE%s | %d complete cases | R²=%.4f Adj R²=%.4f",
+      title = paste("Lifestyle Factors Are Not Directly Associated with", label),
+      subtitle = sprintf("Multivariate: log(pTau) ~ 7 lifestyle + AGE%s | %d complete cases",
                          ifelse(has_sex, " + SEX", ""),
                          nrow(df_multi_complete), s_multi$r.squared, s_multi$adj.r.squared),
       x = "Standardized Effect", y = ""
@@ -194,8 +235,12 @@ run_ptau_analysis <- function(df, ptau_col, age_col, label, n_row) {
     theme_bw(base_size = 12) +
     theme(plot.title = element_text(face = "bold", size = 13),
           plot.subtitle = element_text(size = 8, color = "grey40"),
-          legend.position = "bottom", panel.grid.major.y = element_blank())
+          legend.position = "none") +
+    theme(
+      axis.text.y = ggtext::element_markdown(size = 11, face = "bold")
+    )
 
+    print(p_multi)
   ggsave(file.path(out_dir, sprintf("multivariable_%s.png", gsub(" ", "_", tolower(label)))),
          p_multi, width = 9, height = 5, dpi = 300)
   cat(sprintf("Saved: multivariable_%s\n", tolower(label)))
