@@ -96,7 +96,7 @@ p2 <- p2_base +
   annotate("text",  x = 2.20, y = 26.2, label = "→ pTau217",
            size = 5, color = DUKE_LIGHT, hjust = 0, fontface = "italic")
 
-ggsave(file.path(out_dir,"Fig2_mapt_EMCI_peak.png"), p2, width=10, height=8, dpi=300)
+ggsave(file.path(out_dir,"Fig2_mapt_EMCI_peak.svg"), p2, width=10, height=8, dpi=300)
 cat("Fig2 done\n")
 
 cat("\n=== FIGURE 3: GO BP Enrichment by DX (Top 5 per group) ===\n")
@@ -160,5 +160,5 @@ p3 <- ggplot(df_plot, aes(x = RichFactor, y = label, color = DX)) +
        x = "RichFactor", y = "") +
   theme_post
 
-ggsave(file.path(out_dir, "Fig3_tau_signaling_map.png"), p3, width = 13, height = 8.5, dpi = 300)
+ggsave(file.path(out_dir, "Fig3_tau_signaling_map.svg"), p3, width = 13, height = 8.5, dpi = 300)
 cat("Fig3 done\n\nALL DONE\n")
